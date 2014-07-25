@@ -1,0 +1,18 @@
+
+*.tmp
+*.bak
+*.user
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac
+.DS_Store
+
+# SlickEdit
+*.vpj
+*.vpw
+*.vpwhistu
+*.vtg
