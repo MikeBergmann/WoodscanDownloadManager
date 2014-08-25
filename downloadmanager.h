@@ -42,6 +42,7 @@ signals:
 
 public slots:
   void download(QUrl url);
+  void download(QUrl url, QByteArray *destination);
   void pause(void);
   void resume(void);
 
@@ -51,11 +52,13 @@ private slots:
   void finished(void);
   void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
   void gotError(QNetworkReply::NetworkError errorCode);
+  void authenticationRequired(QNetworkReply *reply, QAuthenticator *auth);
   void timeout(void);
 
 private:
   QString m_fileName;
   QFile *m_file;
+  QDataStream *m_stream;
   QNetworkAccessManager *m_manager;
   QNetworkRequest *m_request;
   QNetworkReply *m_reply;
@@ -64,6 +67,9 @@ private:
   int m_downloadSize;
   int m_pausedSize;
   QTimer *m_timer;
+
+  void downloadRequest(QUrl url);
+
 };
 
 #endif // DOWNLOADMANAGER_H_

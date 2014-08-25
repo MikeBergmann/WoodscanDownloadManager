@@ -34,18 +34,32 @@ class MainWidget : public QWidget {
 public:
   explicit MainWidget(QWidget *parent = 0);
 
+signals:
+  void start(void);
+
 private slots:
   void printText(QString qsLine);
   void progress(int percentage);
   void finished(void);
 
-  void on_download_clicked(void);
-  void on_pause_clicked(void);
-  void on_resume_clicked(void);
+  void checkMilestone(void);
 
 private:
+
+  enum Modes {
+    mode_none = 0,
+    mode_md5,
+    mode_db
+  };
+
   Ui::Form *m_ui;
+  QString m_url;
+  QString m_urlParameter;
+  QString m_serial;
+  QString m_drive;
+  Modes m_mode;
   DownloadManager *m_manager;
+  QByteArray m_md5;
 };
 
 #endif // MAINWIDGET_H_

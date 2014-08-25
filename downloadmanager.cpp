@@ -27,26 +27,29 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QTimer>
+#include <QAuthenticator>
 
 DownloadManager::DownloadManager(QObject *parent)
-  : QObject(parent)
-  , m_fileName()
-  , m_file(0)
-  , m_manager(0)
-  , m_request()
-  , m_reply(0)
-  , m_hostSupportsRanges(false)
-  , m_totalSize(0)
-  , m_downloadSize(0)
-  , m_pausedSize(0)
-  , m_timer(0) {
+: QObject(parent)
+, m_fileName()
+, m_file(0)
+, m_manager(0)
+, m_request(0)
+, m_reply(0)
+, m_hostSupportsRanges(false)
+, m_totalSize(0)
+, m_downloadSize(0)
+, m_pausedSize(0)
+, m_timer(0) {
   m_manager = new QNetworkAccessManager(this);
+  connect(m_manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)), this, SLOT(authenticationRequired(QNetworkReply*,QAuthenticator*)));
+
+  // Timeout timer
   m_timer = new QTimer(this);
   m_timer->setInterval(5000);
   m_timer->setSingleShot(true);
   connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
 }
-
 
 DownloadManager::~DownloadManager(void) {
   try {
@@ -59,14 +62,13 @@ DownloadManager::~DownloadManager(void) {
   }
 }
 
+void DownloadManager::downloadRequest(QUrl url) {
+  delete m_request;
+  m_request = new QNetworkRequest();
+  m_request->setUrl(url);
 
-void DownloadManager::download(QUrl url) {
-  m_fileName = QFileInfo(url.toString()).fileName();
-//  m_fileName = "test.txt";
   m_downloadSize = 0;
   m_pausedSize = 0;
-
-  m_request = new QNetworkRequest(url);
 
   // Request to obtain the network headers
   m_reply = m_manager->head(*m_request);
@@ -74,9 +76,17 @@ void DownloadManager::download(QUrl url) {
   connect(m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
   // Start timeout
-  m_timer->start();
+//  m_timer->start();
 }
 
+void DownloadManager::download(QUrl url) {
+  downloadRequest(url);
+}
+
+void DownloadManager::download(QUrl url, QByteArray *destination) {
+  m_stream = new QDataStream(destination,QIODevice::WriteOnly);
+  downloadRequest(url);
+}
 
 void DownloadManager::pause(void) {
   if(m_reply == 0) {
@@ -100,7 +110,6 @@ void DownloadManager::resume(void) {
   download();
 }
 
-
 void DownloadManager::download(void) {
   if(m_hostSupportsRanges) {
     QByteArray rangeHeaderValue = "bytes=" + QByteArray::number(m_pausedSize) + "-";
@@ -117,18 +126,18 @@ void DownloadManager::download(void) {
   connect(m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
   // Start timeout
-  m_timer->start();
+//  m_timer->start();
 }
-
 
 void DownloadManager::gotHeader(void) {
   m_timer->stop();
   m_hostSupportsRanges = false;
+  m_totalSize = 0;
 
   QList<QByteArray> rawHeaderList = m_reply->rawHeaderList();
   foreach(QByteArray header, rawHeaderList) {
     QString headerLine = QString(header) + ": " + m_reply->rawHeader(header);
-    emit printText(headerLine+"\n");
+    emit printText(headerLine);
   }
 
   if(m_reply->hasRawHeader("Accept-Ranges")) {
@@ -137,42 +146,80 @@ void DownloadManager::gotHeader(void) {
     qDebug() << "Accept-Ranges = " << acceptRanges << m_hostSupportsRanges;
   }
 
+  // Check if we get a relocation, this will happen if we request a download by a php script.
+  QString location;
+  if(m_reply->hasRawHeader("Location")) {
+    location = m_reply->rawHeader("Location");
+  }
+
+  QString disposition;
+  if(m_reply->hasRawHeader("Content-Disposition")) {
+    disposition = m_reply->rawHeader("Content-Disposition");
+  }
+
   m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toInt();
   m_reply->deleteLater();
   m_reply = 0;
 
+  if(!location.isEmpty()) {
+     // We got a new location of the file, reissue download request.
+    QUrl url = m_request->url().scheme()+"://"+m_request->url().host()+"/"+location;
+    downloadRequest(url);
+    return;
+  }
+
   m_request->setRawHeader("Connection", "Keep-Alive");
   m_request->setAttribute(QNetworkRequest::HttpPipeliningAllowedAttribute, true);
-  m_file = new QFile(m_fileName + ".part");
-  if(!m_hostSupportsRanges) {
-    m_file->remove();
-  }
-  m_file->open(QIODevice::ReadWrite | QIODevice::Append);
 
-  m_pausedSize = m_file->size();
+  if(!m_stream) {
+    if(!disposition.isEmpty()) {
+      m_fileName = QString(disposition.split("filename=").at(1)).remove("\"");
+    } else {
+      m_fileName = "temp.bin";
+    }
+
+    m_file = new QFile(m_fileName + ".part");
+    if(!m_hostSupportsRanges) {
+      m_file->remove();
+    }
+    m_file->open(QIODevice::ReadWrite | QIODevice::Append);
+    m_stream = new QDataStream(m_file);
+    m_pausedSize = m_file->size();
+  }
+
   download();
 }
-
 
 void DownloadManager::finished(void) {
   m_timer->stop();
   m_reply->deleteLater();
   m_reply = 0;
-  m_file->close();
-  QFile::remove(m_fileName);
-  m_file->rename(m_fileName + ".part", m_fileName);
-  delete m_file;
-  m_file = 0;
+
+  if(m_file) {
+    m_file->close();
+    QFile::remove(m_fileName);
+    m_file->rename(m_fileName + ".part", m_fileName);
+    delete m_file;
+    m_file = 0;
+  }
+
+  delete m_stream;
+  m_stream = 0;
+
   emit complete();
 }
-
 
 void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal) {
   m_timer->stop();
   m_downloadSize = m_pausedSize + bytesReceived;
-  qDebug() << "Download Progress: Received=" << m_downloadSize << ": Total=" << m_pausedSize + bytesTotal;
+  qDebug() << QTime::currentTime() << "Download Progress: Received=" << m_downloadSize << ": Total=" << m_pausedSize + bytesTotal;
 
-  m_file->write(m_reply->readAll());
+  QByteArray replyData = m_reply->readAll();
+
+  // Do not stream to QDataStream because the stream makes some sort of
+  // data encoding, use writeRawData instead.
+  m_stream->writeRawData(replyData.data(),replyData.size());
+
   int percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
   qDebug() << percentage;
   emit downloadProgress(percentage);
@@ -180,12 +227,17 @@ void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal) 
   m_timer->start();
 }
 
-
 void DownloadManager::gotError(QNetworkReply::NetworkError errorcode) {
   qDebug() << __FUNCTION__ << "(" << errorcode << ")";
   m_reply->deleteLater();
 }
 
+void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenticator *auth)
+{
+  // If we try to download from a site with authentication required we will fill the credentials here.
+  auth->setUser("");
+  auth->setPassword("");
+}
 
 void DownloadManager::timeout(void) {
   qDebug() << __FUNCTION__;
