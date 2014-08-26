@@ -33,12 +33,14 @@ SOURCES += \
     main.cpp \
     mainwidget.cpp \
     downloadmanager.cpp \
-    milestone.cpp
+    milestone.cpp \
+    download.cpp
 
 HEADERS += \
     mainwidget.h \
     downloadmanager.h \
-    milestone.h
+    milestone.h \
+    download.h
 
 FORMS += \
     form.ui

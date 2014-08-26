@@ -40,7 +40,7 @@ signals:
 private slots:
   void printText(QString qsLine);
   void progress(int percentage);
-  void finished(void);
+  void finished(Download *dl);
 
   void checkMilestone(void);
 

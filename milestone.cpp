@@ -55,7 +55,8 @@ using namespace std;
  *
  * @return DeviceInstance
  */
-DEVINST GetDrivesDevInstByDeviceNumber(long DeviceNumber) {
+DEVINST GetDrivesDevInstByDeviceNumber(long DeviceNumber)
+{
   const GUID *guid = &GUID_DEVINTERFACE_DISK;
 
   // Get device interface info handle for all devices attached to system
@@ -123,7 +124,8 @@ DEVINST GetDrivesDevInstByDeviceNumber(long DeviceNumber) {
  *
  * @return true if match, otherwise false
  */
-bool matchDevInstToUsbDevice(DEVINST device, DWORD vid, DWORD pid, LPTSTR node) {
+bool matchDevInstToUsbDevice(DEVINST device, DWORD vid, DWORD pid, LPTSTR node)
+{
   // This is the string we will be searching for in the device harware IDs.
   TCHAR hwid[64];
   _stprintf(hwid, _T("VID_%04X&PID_%04X"), vid, pid);
@@ -162,7 +164,8 @@ bool matchDevInstToUsbDevice(DEVINST device, DWORD vid, DWORD pid, LPTSTR node) 
 }
 
 // Find a USB device by it's Vendor and Product IDs. When found, eject it.
-bool getMilestoneSerial(unsigned vid, unsigned pid, QString& serial, QString& drives) {
+bool getMilestoneSerial(unsigned vid, unsigned pid, QString& serial, QString& drives)
+{
   bool found = false;
 
   TCHAR devicepath[8];

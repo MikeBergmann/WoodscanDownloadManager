@@ -18,8 +18,8 @@
 */
 
 #include "downloadmanager.h"
+#include "download.h"
 
-#include <QFile>
 #include <QFileInfo>
 #include <QDateTime>
 #include <QDebug>
@@ -30,206 +30,151 @@
 #include <QAuthenticator>
 
 DownloadManager::DownloadManager(QObject *parent)
-: QObject(parent)
-, m_fileName()
-, m_file(0)
-, m_manager(0)
-, m_request(0)
-, m_reply(0)
-, m_hostSupportsRanges(false)
-, m_totalSize(0)
-, m_downloadSize(0)
-, m_pausedSize(0)
-, m_timer(0) {
+  : QObject(parent)
+  , m_manager(0)
+{
   m_manager = new QNetworkAccessManager(this);
   connect(m_manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)), this, SLOT(authenticationRequired(QNetworkReply*,QAuthenticator*)));
-
-  // Timeout timer
-  m_timer = new QTimer(this);
-  m_timer->setInterval(5000);
-  m_timer->setSingleShot(true);
-  connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
 }
 
-DownloadManager::~DownloadManager(void) {
+DownloadManager::~DownloadManager(void)
+{
   try {
-    if(m_reply) {
-      pause();
+    QHashIterator<QNetworkReply*, Download*> i(m_downloads);
+    while (i.hasNext()) {
+      i.next();
+      delete i.value();
     }
-    delete m_request;
   } catch(...) {
     qDebug() << "exception within ~DownloadManager(void)" << endl;
   }
 }
 
-void DownloadManager::downloadRequest(QUrl url) {
-  delete m_request;
-  m_request = new QNetworkRequest();
-  m_request->setUrl(url);
-
-  m_downloadSize = 0;
-  m_pausedSize = 0;
-
+void DownloadManager::downloadRequest(Download *dl)
+{
   // Request to obtain the network headers
-  m_reply = m_manager->head(*m_request);
-  connect(m_reply, SIGNAL(finished()), this, SLOT(gotHeader()));
-  connect(m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
+  dl->m_reply = m_manager->head(*(dl->m_request));
+  connect(dl->m_reply, SIGNAL(finished()), this, SLOT(gotHeader()));
+  connect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
+
+  // Timeout timer
+  connect(dl, SIGNAL(timeout(QNetworkReply*)), this, SLOT(timeout(QNetworkReply*)));
+
+  m_downloads.insert(dl->m_reply,dl);
 
   // Start timeout
-//  m_timer->start();
+//  dl->timerStart();
 }
 
-void DownloadManager::download(QUrl url) {
-  downloadRequest(url);
+Download* DownloadManager::download(QUrl url)
+{
+  Download *dl = new Download(url);
+  downloadRequest(dl);
+  return dl;
 }
 
-void DownloadManager::download(QUrl url, QByteArray *destination) {
-  m_stream = new QDataStream(destination,QIODevice::WriteOnly);
-  downloadRequest(url);
+Download* DownloadManager::download(QUrl url, QByteArray *destination)
+{
+  Download *dl = new Download(url, new QDataStream(destination,QIODevice::WriteOnly));
+  downloadRequest(dl);
+  return dl;
 }
 
-void DownloadManager::pause(void) {
-  if(m_reply == 0) {
-    return;
-  }
-  m_timer->stop();
-  disconnect(m_reply, SIGNAL(finished()), this, SLOT(finished()));
-  disconnect(m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
-  disconnect(m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
+void DownloadManager::pause(Download *dl)
+{
+  disconnect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
+  disconnect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
+  disconnect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
-  m_reply->abort();
-  m_reply->deleteLater();
-  m_reply = 0;
-  m_file->flush();
-  m_pausedSize = m_downloadSize;
-  m_downloadSize = 0;
+  dl->pause();
 }
 
-
-void DownloadManager::resume(void) {
-  download();
+void DownloadManager::resume(Download *dl)
+{
+  doDownload(dl);
 }
 
-void DownloadManager::download(void) {
-  if(m_hostSupportsRanges) {
-    QByteArray rangeHeaderValue = "bytes=" + QByteArray::number(m_pausedSize) + "-";
-    if(m_totalSize > 0) {
-      rangeHeaderValue += QByteArray::number(m_totalSize);
-    }
-    m_request->setRawHeader("Range", rangeHeaderValue);
-  }
+void DownloadManager::doDownload(Download *dl)
+{
+  dl->fillRequestHeader();
 
   // Download file
-  m_reply = m_manager->get(*m_request);
-  connect(m_reply, SIGNAL(finished()), this, SLOT(finished()));
-  connect(m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
-  connect(m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
+  if(dl->m_reply) {
+    m_downloads.remove(dl->m_reply);
+    dl->m_reply->deleteLater();
+  }
+
+  dl->m_reply = m_manager->get(*(dl->m_request));
+  m_downloads.insert(dl->m_reply, dl);
+
+  connect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
+  connect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
+  connect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
   // Start timeout
-//  m_timer->start();
+//  dl->timerStart();
 }
 
-void DownloadManager::gotHeader(void) {
-  m_timer->stop();
-  m_hostSupportsRanges = false;
-  m_totalSize = 0;
+void DownloadManager::gotHeader(void)
+{
+  Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
 
-  QList<QByteArray> rawHeaderList = m_reply->rawHeaderList();
+  dl->timerStop();
+
+  QList<QByteArray> rawHeaderList = dl->m_reply->rawHeaderList();
   foreach(QByteArray header, rawHeaderList) {
-    QString headerLine = QString(header) + ": " + m_reply->rawHeader(header);
+    QString headerLine = QString(header) + ": " + dl->m_reply->rawHeader(header);
     emit printText(headerLine);
   }
 
-  if(m_reply->hasRawHeader("Accept-Ranges")) {
-    QString acceptRanges = m_reply->rawHeader("Accept-Ranges");
-    m_hostSupportsRanges = (acceptRanges.compare("bytes", Qt::CaseInsensitive) == 0);
-    qDebug() << "Accept-Ranges = " << acceptRanges << m_hostSupportsRanges;
-  }
+  dl->parseHeader();
 
-  // Check if we get a relocation, this will happen if we request a download by a php script.
-  QString location;
-  if(m_reply->hasRawHeader("Location")) {
-    location = m_reply->rawHeader("Location");
-  }
+  m_downloads.remove(dl->m_reply);
+  dl->m_reply->deleteLater();
+  dl->m_reply = 0;
 
-  QString disposition;
-  if(m_reply->hasRawHeader("Content-Disposition")) {
-    disposition = m_reply->rawHeader("Content-Disposition");
-  }
-
-  m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toInt();
-  m_reply->deleteLater();
-  m_reply = 0;
-
-  if(!location.isEmpty()) {
-     // We got a new location of the file, reissue download request.
-    QUrl url = m_request->url().scheme()+"://"+m_request->url().host()+"/"+location;
-    downloadRequest(url);
+  if(dl->checkRelocation()) {
+    dl->relocate();
+    downloadRequest(dl);
     return;
   }
 
-  m_request->setRawHeader("Connection", "Keep-Alive");
-  m_request->setAttribute(QNetworkRequest::HttpPipeliningAllowedAttribute, true);
+  dl->openFile();
 
-  if(!m_stream) {
-    if(!disposition.isEmpty()) {
-      m_fileName = QString(disposition.split("filename=").at(1)).remove("\"");
-    } else {
-      m_fileName = "temp.bin";
-    }
-
-    m_file = new QFile(m_fileName + ".part");
-    if(!m_hostSupportsRanges) {
-      m_file->remove();
-    }
-    m_file->open(QIODevice::ReadWrite | QIODevice::Append);
-    m_stream = new QDataStream(m_file);
-    m_pausedSize = m_file->size();
-  }
-
-  download();
+  doDownload(dl);
 }
 
-void DownloadManager::finished(void) {
-  m_timer->stop();
-  m_reply->deleteLater();
-  m_reply = 0;
+void DownloadManager::finished(void)
+{
+  Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
 
-  if(m_file) {
-    m_file->close();
-    QFile::remove(m_fileName);
-    m_file->rename(m_fileName + ".part", m_fileName);
-    delete m_file;
-    m_file = 0;
-  }
+  dl->timerStop();
+  dl->m_reply->deleteLater();
+  dl->m_reply = 0;
 
-  delete m_stream;
-  m_stream = 0;
+  dl->closeFile();
 
-  emit complete();
+  emit complete(dl);
 }
 
-void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal) {
-  m_timer->stop();
-  m_downloadSize = m_pausedSize + bytesReceived;
-  qDebug() << QTime::currentTime() << "Download Progress: Received=" << m_downloadSize << ": Total=" << m_pausedSize + bytesTotal;
+void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
+{
+  QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());
+  Download *dl = m_downloads.value(reply);
 
-  QByteArray replyData = m_reply->readAll();
+  dl->timerStop();
+  int percentage = dl->processDownload(bytesReceived, bytesTotal);
 
-  // Do not stream to QDataStream because the stream makes some sort of
-  // data encoding, use writeRawData instead.
-  m_stream->writeRawData(replyData.data(),replyData.size());
-
-  int percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
-  qDebug() << percentage;
   emit downloadProgress(percentage);
 
-  m_timer->start();
+  dl->timerStart();
 }
 
-void DownloadManager::gotError(QNetworkReply::NetworkError errorcode) {
+void DownloadManager::gotError(QNetworkReply::NetworkError errorcode)
+{
+  QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());
   qDebug() << __FUNCTION__ << "(" << errorcode << ")";
-  m_reply->deleteLater();
+  reply->deleteLater();
 }
 
 void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenticator *auth)
@@ -239,8 +184,9 @@ void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenti
   auth->setPassword("");
 }
 
-void DownloadManager::timeout(void) {
+void DownloadManager::timeout(QNetworkReply* reply)
+{
   qDebug() << __FUNCTION__;
-  m_reply->deleteLater();
+  reply->deleteLater();
 }
 

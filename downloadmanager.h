@@ -21,12 +21,11 @@
 #define DOWNLOADMANAGER_H_
 
 #include <QObject>
-#include <QNetworkReply>
 
-class QFile;
+class Download;
 class QNetworkAccessManager;
-class QNetworkRequest;
-class QTimer;
+
+#include <QNetworkReply>
 
 class DownloadManager : public QObject {
   Q_OBJECT
@@ -37,39 +36,29 @@ public:
 
 signals:
   void printText(QString qsLine);
-  void complete(void);
+  void complete(Download *dl);
   void downloadProgress(int percentage);
 
 public slots:
-  void download(QUrl url);
-  void download(QUrl url, QByteArray *destination);
-  void pause(void);
-  void resume(void);
+  Download* download(QUrl url);
+  Download* download(QUrl url, QByteArray *destination);
+  void pause(Download *dl);
+  void resume(Download *dl);
 
 private slots:
-  void download(void);
   void gotHeader(void);
   void finished(void);
   void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
   void gotError(QNetworkReply::NetworkError errorCode);
   void authenticationRequired(QNetworkReply *reply, QAuthenticator *auth);
-  void timeout(void);
+  void timeout(QNetworkReply* reply);
 
 private:
-  QString m_fileName;
-  QFile *m_file;
-  QDataStream *m_stream;
   QNetworkAccessManager *m_manager;
-  QNetworkRequest *m_request;
-  QNetworkReply *m_reply;
-  bool m_hostSupportsRanges;
-  int m_totalSize;
-  int m_downloadSize;
-  int m_pausedSize;
-  QTimer *m_timer;
+  QHash<QNetworkReply*, Download*> m_downloads;
 
-  void downloadRequest(QUrl url);
-
+  void doDownload(Download *dl);
+  void downloadRequest(Download *dl);
 };
 
 #endif // DOWNLOADMANAGER_H_

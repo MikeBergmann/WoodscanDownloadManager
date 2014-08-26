@@ -33,7 +33,8 @@ MainWidget::MainWidget(QWidget *parent)
 , m_urlParameter()
 , m_serial()
 , m_drive()
-, m_manager(0) {
+, m_manager(0)
+{
   m_ui->setupUi(this);
 
   m_url = "http://woodscan.bones.ch/updater.php";
@@ -41,7 +42,7 @@ MainWidget::MainWidget(QWidget *parent)
 
   m_manager = new DownloadManager(this);
   connect(m_manager, SIGNAL(printText(QString)), this, SLOT(printText(QString)));
-  connect(m_manager, SIGNAL(complete()), this, SLOT(finished()));
+  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(finished(Download*)));
   connect(m_manager, SIGNAL(downloadProgress(int)), this, SLOT(progress(int)));
 
   // QueuedConnection because we want to finish constructur befor calling the slot.
@@ -77,29 +78,47 @@ void MainWidget::checkMilestone()
   // Download MD5 file and check if we already know this file
   m_mode = mode_md5;
   m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_md5);
+  m_ui->textEdit->textCursor().insertText(NL);
 }
 
-void MainWidget::printText(QString text) {
+void MainWidget::printText(QString text)
+{
   qDebug() << text;
 }
 
-void MainWidget::progress(int percentage) {
-  m_ui->textEdit->undo();
-  m_ui->textEdit->textCursor().insertText(tr("Download: %1 %").arg(percentage)+NL);
+void MainWidget::progress(int percentage)
+{
+  if(percentage<100) {
+    m_ui->textEdit->undo();
+    m_ui->textEdit->textCursor().insertText(tr("Download: %1 %").arg(percentage)+NL);
+  }
 }
 
-void MainWidget::finished(void) {
+void MainWidget::finished(Download *dl)
+{
+  Download *file;
+
   switch(m_mode) {
   case mode_md5:
     m_ui->textEdit->textCursor().insertText(tr("MD5: %1").arg(QString(m_md5))+NL);
-
+    m_md5.clear();
     m_mode = mode_db;
     qDebug() << "Start:" << QTime::currentTime() << endl;
-    m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
-
+    file = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
+    m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_md5);
+    m_ui->textEdit->textCursor().insertText(NL);
     break;
   case mode_db:
+    if(dl != file) {
+      m_ui->textEdit->undo();
+      m_ui->textEdit->textCursor().insertText(tr("Generate File: %1 %").arg(QString(m_md5))+NL);
+      if(QString(m_md5) != "100") {
+        m_md5.clear();
+        m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_md5);
+      }
+    } else {
       qDebug() << "Finished:" << QTime::currentTime() << endl;
+    }
     break;
   default:
     ;
