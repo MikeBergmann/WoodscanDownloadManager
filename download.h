@@ -21,11 +21,11 @@
 #define DOWNLOAD_H
 
 #include <QObject>
+#include <QNetworkReply>
 
 class QFile;
 class QNetworkAccessManager;
 class QNetworkRequest;
-class QNetworkReply;
 class QTimer;
 
 class DownloadBase : public QObject {
@@ -53,12 +53,14 @@ public:
   void fillRequestHeader(void);
   void parseHeader(void);
   void openFile(void);
-  void closeFile(void);
+  QString closeFile(void);
   bool checkRelocation(void);
   void relocate(void);
   void timerStart(void);
   void timerStop(void);
   int processDownload(qint64 bytesReceived, qint64 bytesTotal);
+  QNetworkReply::NetworkError error(void);
+  QString filename(void);
 
 signals:
   void timeout(QNetworkReply *reply);
@@ -75,6 +77,7 @@ private:
   int m_totalSize;
   int m_downloadSize;
   int m_pausedSize;
+  QNetworkReply::NetworkError m_error;
 
   QString m_newLocation;
 

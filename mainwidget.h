@@ -38,7 +38,8 @@ signals:
   void start(void);
 
 private slots:
-  void printText(QString qsLine);
+  void printText(QString text);
+  void debugText(QString text);
   void progress(int percentage);
   void finished(Download *dl);
 
@@ -57,9 +58,11 @@ private:
   QString m_urlParameter;
   QString m_serial;
   QString m_drive;
+  QString m_destinationPath;
   Modes m_mode;
   DownloadManager *m_manager;
   QByteArray m_md5;
+  QByteArray m_webdata;
 };
 
 #endif // MAINWIDGET_H_

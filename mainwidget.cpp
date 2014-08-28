@@ -23,8 +23,14 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QInputDialog>
+#include <QFileDialog>
+
+#include "download.h"
 
 #define NL QString("\n\r")
+#define PATH QString("/Barcode")
+#define MD5FILE QString("/germany.md5")
+#define DATAFILE QString("/germany.ebx")
 
 MainWidget::MainWidget(QWidget *parent)
 : QWidget(parent)
@@ -33,7 +39,10 @@ MainWidget::MainWidget(QWidget *parent)
 , m_urlParameter()
 , m_serial()
 , m_drive()
+, m_destinationPath()
 , m_manager(0)
+, m_md5()
+, m_webdata()
 {
   m_ui->setupUi(this);
 
@@ -41,7 +50,7 @@ MainWidget::MainWidget(QWidget *parent)
   m_urlParameter = "?serial=%1&rType=%2";
 
   m_manager = new DownloadManager(this);
-  connect(m_manager, SIGNAL(printText(QString)), this, SLOT(printText(QString)));
+  connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
   connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(finished(Download*)));
   connect(m_manager, SIGNAL(downloadProgress(int)), this, SLOT(progress(int)));
 
@@ -53,71 +62,130 @@ MainWidget::MainWidget(QWidget *parent)
 
 void MainWidget::checkMilestone()
 {
-  m_ui->textEdit->textCursor().insertText(tr("Welcome to the Bones Woodcann Download Manager!\n\r"));
+  printText(tr("Welcome to the Bones Woodcann Download Manager!") + NL);
 
-  // Get attached Milestone and check if Barcode is installed
+  // Get attached Milestone and check if barcode database is installed
   if(!getMilestoneSerial(0xEF8,0x312, m_serial, m_drive))
     getMilestoneSerial(0xEF8,0x212, m_serial, m_drive);
 
   if(m_serial.isEmpty()) {
     bool ok;
-    m_serial = QInputDialog::getText(this, tr("Enter Serial"),
-                                   tr("Please enter Milestone Serial Number:"), QLineEdit::Normal,
+    m_serial = QInputDialog::getText(this, tr("Enter serial"),
+                                   tr("Please enter Milestone serial number:"), QLineEdit::Normal,
                                    QString(), &ok);
-    if (ok && !m_serial.isEmpty())
-      m_ui->textEdit->textCursor().insertText(tr("Milestone Serial %1, but no connected").arg(m_serial)+NL);
+    if (ok && !m_serial.isEmpty()) {
+      printText(tr("Milestone serial %1, device not connected").arg(m_serial) + NL);
+    }
   } else {
-      m_ui->textEdit->textCursor().insertText(tr("Milestone with Serial %1 connected as %2").arg(m_serial).arg(m_drive.at(0)));
+      printText(tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drive.at(0)));
       if(m_drive.length()>1) {
-        m_ui->textEdit->textCursor().insertText(tr(" and %1").arg(m_drive.at(1)+NL));
+        printText(tr(" and %1").arg(m_drive.at(1) + NL));
       } else {
-        m_ui->textEdit->textCursor().insertText(NL);
+        printText(NL);
       }
+  }
+
+  if(m_serial.isEmpty()) {
+    printText(tr("No Milestone serial number. Aborting.") + NL);
+    return;
+  }
+
+  if(!m_drive.isEmpty()) {
+    m_destinationPath = m_drive.at(0) + ':' + PATH;
+    if(!QFileInfo(m_destinationPath + MD5FILE).exists()) {
+      if(m_drive.size() > 1) {
+        m_destinationPath = m_drive.at(1) + ':' + PATH;
+        if(!QFileInfo(m_destinationPath + MD5FILE).exists()) {
+          m_destinationPath.clear();
+        }
+      }
+    }
+  }
+
+  // Look for MD5 File
+  if(m_destinationPath.isEmpty()) {
+    m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
+  }
+
+  QFile md5file(m_destinationPath + MD5FILE);
+  if(md5file.exists()) {
+    if(md5file.open(QIODevice::ReadOnly)) {
+      m_md5 = md5file.readAll();
+      md5file.close();
+    }
   }
 
   // Download MD5 file and check if we already know this file
   m_mode = mode_md5;
-  m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_md5);
-  m_ui->textEdit->textCursor().insertText(NL);
+  m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
 }
 
 void MainWidget::printText(QString text)
+{
+  m_ui->textEdit->textCursor().insertText(text);
+}
+
+void MainWidget::debugText(QString text)
 {
   qDebug() << text;
 }
 
 void MainWidget::progress(int percentage)
 {
-  if(percentage<100) {
+  if(percentage > 0 && percentage < 100) {
     m_ui->textEdit->undo();
-    m_ui->textEdit->textCursor().insertText(tr("Download: %1 %").arg(percentage)+NL);
+    printText(tr("Download: %1 %").arg(percentage) + NL);
   }
 }
 
 void MainWidget::finished(Download *dl)
 {
-  Download *file;
+  static Download *filedl = 0;
 
   switch(m_mode) {
   case mode_md5:
-    m_ui->textEdit->textCursor().insertText(tr("MD5: %1").arg(QString(m_md5))+NL);
-    m_md5.clear();
-    m_mode = mode_db;
-    qDebug() << "Start:" << QTime::currentTime() << endl;
-    file = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
-    m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_md5);
-    m_ui->textEdit->textCursor().insertText(NL);
+    {
+      qDebug() << "Checksum of online database:" << m_webdata << endl;
+      if(m_webdata == m_md5) {
+        printText(tr("You already have the newest WoodScan database.") + NL);
+        return;
+      }
+
+      m_md5 = m_webdata;
+      printText(tr("There is a newer WoodScan database. Starting download...") + NL);
+
+      m_mode = mode_db;
+      qDebug() << "Start:" << QTime::currentTime() << endl;
+      filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
+      m_webdata.clear();
+      m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
+      printText(NL);
+    }
     break;
   case mode_db:
-    if(dl != file) {
+    if(dl != filedl) {
       m_ui->textEdit->undo();
-      m_ui->textEdit->textCursor().insertText(tr("Generate File: %1 %").arg(QString(m_md5))+NL);
-      if(QString(m_md5) != "100") {
-        m_md5.clear();
-        m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_md5);
+      printText(tr("Generate File: %1 %").arg(QString(m_webdata)) + NL);
+      if(QString(m_webdata) != "100") {
+        m_webdata.clear();
+        m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
       }
     } else {
-      qDebug() << "Finished:" << QTime::currentTime() << endl;
+      m_mode = mode_none;
+      if(dl->error()) {
+        printText(QString("Download error %1").arg(dl->error()) + NL);
+      } else {
+        printText("Download finished, copy files..." + NL);
+        QFile md5file(m_destinationPath + MD5FILE);
+        if(md5file.open(QIODevice::WriteOnly)) {
+          md5file.write(m_md5);
+          md5file.close();
+        }
+
+        QFile::remove(m_destinationPath + DATAFILE);
+        QFile::copy(dl->filename(), m_destinationPath + DATAFILE);
+        printText("Finished!" + NL);
+      }
     }
     break;
   default:

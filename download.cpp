@@ -20,7 +20,6 @@
 #include "download.h"
 
 #include <QNetworkRequest>
-#include <QNetworkReply>
 #include <QString>
 #include <QTimer>
 #include <QDebug>
@@ -36,7 +35,6 @@ DownloadBase::~DownloadBase()
 {
 }
 
-
 Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   : DownloadBase(parent)
   , m_fileName()
@@ -46,6 +44,7 @@ Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   , m_totalSize(0)
   , m_downloadSize(0)
   , m_pausedSize(0)
+  , m_error(QNetworkReply::NoError)
   , m_newLocation()
   , m_timer(0)
 {
@@ -157,18 +156,29 @@ void Download::openFile()
   }
 }
 
-void Download::closeFile()
+QString Download::closeFile()
 {
   if(m_file) {
-    m_file->close();
-    QFile::remove(m_fileName);
-    m_file->rename(m_fileName + ".part", m_fileName);
+    if(m_file->isOpen()) {
+      m_file->close();
+    }
+    if(!m_fileName.isEmpty()) {
+      if(m_error == QNetworkReply::NoError) {
+        QFile::remove(m_fileName);
+        m_file->rename(m_fileName + ".part", m_fileName);
+      } else {
+        QFile::remove(m_fileName);
+        QFile::remove(m_fileName + ".part");
+      }
+    }
     delete m_file;
     m_file = 0;
   }
 
   delete m_stream;
   m_stream = 0;
+
+  return m_fileName;
 }
 
 bool Download::checkRelocation()
@@ -207,9 +217,21 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal)
   // data encoding, use writeRawData instead.
   m_stream->writeRawData(replyData.data(),replyData.size());
 
+  m_error = m_reply->error();
+
   int percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
   qDebug() << percentage;
   return percentage;
+}
+
+QNetworkReply::NetworkError Download::error()
+{
+  return m_error;
+}
+
+QString Download::filename()
+{
+  return m_fileName;
 }
 
 void Download::timeout()
