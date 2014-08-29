@@ -37,6 +37,7 @@ public:
 signals:
   void printText(QString qsLine);
   void complete(Download *dl);
+  void failed(Download *dl);
   void downloadProgress(int percentage);
 
 public slots:

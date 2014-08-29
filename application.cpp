@@ -17,16 +17,24 @@
   along with WoodscanDownloadManager.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <QtGlobal>
-
 #include "application.h"
-#include "mainwidget.h"
 
-int main(int argc, char *argv[])
+#include <QDebug>
+
+Application::Application(int &argc, char **argv)
+  :QApplication(argc, argv)
 {
-  Application a(argc, argv);
-
-  MainWidget wid;
-  wid.show();
-  return a.exec();
 }
+
+bool Application::notify(QObject *object, QEvent *event)
+{
+  //If this is keypress event , do not send it to the receiver
+  if(event->type() == QEvent::KeyPress)
+  {
+    qDebug() << "Received Key Press" << endl;
+    emit keyPressed();
+  }
+
+  return QApplication::notify(object, event);
+}
+

@@ -17,16 +17,25 @@
   along with WoodscanDownloadManager.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <QtGlobal>
+#ifndef APPLICATION_H
+#define APPLICATION_H
 
-#include "application.h"
-#include "mainwidget.h"
+#include <QObject>
+#include <QApplication>
 
-int main(int argc, char *argv[])
+class Application : public QApplication
 {
-  Application a(argc, argv);
+  Q_OBJECT
 
-  MainWidget wid;
-  wid.show();
-  return a.exec();
-}
+public:
+  Application(int &argc, char **argv);
+
+  // QCoreApplication interface
+public:
+  bool notify(QObject *object, QEvent *event);
+
+signals:
+  void keyPressed(void);
+};
+
+#endif // APPLICATION_H

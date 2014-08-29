@@ -29,9 +29,12 @@
 #include <QTimer>
 #include <QAuthenticator>
 
+#define RETRYCNT 10
+
 DownloadManager::DownloadManager(QObject *parent)
   : QObject(parent)
   , m_manager(0)
+  , m_downloads()
 {
   m_manager = new QNetworkAccessManager(this);
   connect(m_manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)), this, SLOT(authenticationRequired(QNetworkReply*,QAuthenticator*)));
@@ -128,6 +131,9 @@ void DownloadManager::gotHeader(void)
   }
 
   dl->parseHeader();
+  if(dl->error()) {
+    qDebug() << dl->error() << endl;
+  }
 
   m_downloads.remove(dl->m_reply);
   dl->m_reply->deleteLater();
@@ -152,8 +158,22 @@ void DownloadManager::finished(void)
   dl->m_reply->deleteLater();
   dl->m_reply = 0;
 
-  dl->closeFile();
+  if(dl->error()) {
+    if(dl->errorCnt() < RETRYCNT) {
+      qDebug() << dl->error() << endl;
+      if(dl->error() == QNetworkReply::RemoteHostClosedError) {
+        doDownload(dl);
+        return;
+      }
+    } else {
+      dl->closeFile();
+      emit failed(dl) ;
+      return;
+    }
+  }
 
+  dl->closeFile();
+  qDebug() <<  "Completed, retries:" << dl->errorCnt() << endl;
   emit complete(dl);
 }
 

@@ -24,8 +24,10 @@
 #include <QPushButton>
 #include <QInputDialog>
 #include <QFileDialog>
+#include <QTimer>
 
 #include "download.h"
+#include "application.h"
 
 #define NL QString("\n\r")
 #define PATH QString("/Barcode")
@@ -43,6 +45,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_manager(0)
 , m_md5()
 , m_webdata()
+, m_checkProgress(0)
 {
   m_ui->setupUi(this);
 
@@ -51,11 +54,22 @@ MainWidget::MainWidget(QWidget *parent)
 
   m_manager = new DownloadManager(this);
   connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
-  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(finished(Download*)));
-  connect(m_manager, SIGNAL(downloadProgress(int)), this, SLOT(progress(int)));
+  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+  connect(m_manager, SIGNAL(downloadProgress(int)), this, SLOT(downloadProgress(int)));
+
+  Application *app = dynamic_cast<Application*>(qApp);
+  connect(app, SIGNAL(keyPressed()), this, SLOT(nextStep()));
+
+  m_checkProgress = new QTimer(this);
+  m_checkProgress->setInterval(5000);
+  m_checkProgress->setSingleShot(true);
+
+  // Timeout timer
+  connect(m_checkProgress, SIGNAL(timeout()), this, SLOT(checkProgress()));
 
   // QueuedConnection because we want to finish constructur befor calling the slot.
-  connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);
+  connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);  
 
   emit start();
 }
@@ -115,9 +129,14 @@ void MainWidget::checkMilestone()
     }
   }
 
-  // Download MD5 file and check if we already know this file
   m_mode = mode_md5;
-  m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
+  printText(tr("I'm now going online to check if a new WoodScan database is available. Please press a key to continue.") + NL);
+}
+
+void MainWidget::checkProgress()
+{
+  m_webdata.clear();
+  m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
 }
 
 void MainWidget::printText(QString text)
@@ -130,15 +149,17 @@ void MainWidget::debugText(QString text)
   qDebug() << text;
 }
 
-void MainWidget::progress(int percentage)
+void MainWidget::downloadProgress(int percentage)
 {
   if(percentage > 0 && percentage < 100) {
-    m_ui->textEdit->undo();
-    printText(tr("Download: %1 %").arg(percentage) + NL);
+    if(percentage%5 == 0) {
+      m_ui->textEdit->clear();
+      printText(tr("Downloading: %1 %").arg(percentage) + NL);
+    }
   }
 }
 
-void MainWidget::finished(Download *dl)
+void MainWidget::downloadFinished(Download *dl)
 {
   static Download *filedl = 0;
 
@@ -148,6 +169,7 @@ void MainWidget::finished(Download *dl)
       qDebug() << "Checksum of online database:" << m_webdata << endl;
       if(m_webdata == m_md5) {
         printText(tr("You already have the newest WoodScan database.") + NL);
+        m_mode = mode_none;
         return;
       }
 
@@ -157,40 +179,56 @@ void MainWidget::finished(Download *dl)
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
       filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
-      m_webdata.clear();
-      m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
+      m_checkProgress->start();
       printText(NL);
     }
     break;
   case mode_db:
     if(dl != filedl) {
-      m_ui->textEdit->undo();
-      printText(tr("Generate File: %1 %").arg(QString(m_webdata)) + NL);
-      if(QString(m_webdata) != "100") {
-        m_webdata.clear();
-        m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
+      if(QString(m_webdata).toInt() != 100) {
+        if(QString(m_webdata).toInt() > 0) {
+          m_ui->textEdit->clear();
+          printText(tr("Generating database file: %1 %").arg(QString(m_webdata)) + NL);
+        }
+        m_checkProgress->start();
       }
     } else {
       m_mode = mode_none;
-      if(dl->error()) {
-        printText(QString("Download error %1").arg(dl->error()) + NL);
-      } else {
-        printText("Download finished, copy files..." + NL);
-        QFile md5file(m_destinationPath + MD5FILE);
-        if(md5file.open(QIODevice::WriteOnly)) {
-          md5file.write(m_md5);
-          md5file.close();
-        }
-
-        QFile::remove(m_destinationPath + DATAFILE);
-        QFile::copy(dl->filename(), m_destinationPath + DATAFILE);
-        printText("Finished!" + NL);
+      m_ui->textEdit->clear();
+      printText("Download finished, copy files..." + NL);
+      QFile md5file(m_destinationPath + MD5FILE);
+      if(md5file.open(QIODevice::WriteOnly)) {
+        md5file.write(m_md5);
+        md5file.close();
       }
+
+      QFile::remove(m_destinationPath + DATAFILE);
+      QFile::copy(dl->filename(), m_destinationPath + DATAFILE);
+      m_ui->textEdit->clear();
+      printText("Finished!" + NL);
     }
     break;
   default:
     ;
-  }
+    }
 }
 
+void MainWidget::downloadFailed(Download *dl)
+{
+  m_ui->textEdit->clear();
+  printText(QString("Download error %1").arg(dl->error()) + NL);
+}
+
+void MainWidget::nextStep()
+{
+  switch(m_mode) {
+  case mode_md5:
+    // Download MD5 file and check if we already know this file
+    m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
+    m_ui->textEdit->clear();
+    break;
+  default:
+      ;
+  }
+}
 

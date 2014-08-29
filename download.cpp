@@ -45,6 +45,7 @@ Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   , m_downloadSize(0)
   , m_pausedSize(0)
   , m_error(QNetworkReply::NoError)
+  , m_errorCnt(0)
   , m_newLocation()
   , m_timer(0)
 {
@@ -218,15 +219,22 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal)
   m_stream->writeRawData(replyData.data(),replyData.size());
 
   m_error = m_reply->error();
+  if(m_error != QNetworkReply::NoError) {
+    m_errorCnt++;
+  }
 
   int percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
-  qDebug() << percentage;
   return percentage;
 }
 
 QNetworkReply::NetworkError Download::error()
 {
   return m_error;
+}
+
+int Download::errorCnt()
+{
+  return m_errorCnt;
 }
 
 QString Download::filename()

@@ -60,6 +60,7 @@ public:
   void timerStop(void);
   int processDownload(qint64 bytesReceived, qint64 bytesTotal);
   QNetworkReply::NetworkError error(void);
+  int errorCnt(void);
   QString filename(void);
 
 signals:
@@ -78,6 +79,7 @@ private:
   int m_downloadSize;
   int m_pausedSize;
   QNetworkReply::NetworkError m_error;
+  int m_errorCnt;
 
   QString m_newLocation;
 
