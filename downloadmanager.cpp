@@ -197,7 +197,7 @@ void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
     return;
   }
 
-  emit downloadProgress(percentage);
+  emit downloadProgress(dl, percentage);
 
   dl->timerStart();
 }

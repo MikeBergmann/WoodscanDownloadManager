@@ -48,6 +48,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_md5()
 , m_webdata()
 , m_checkProgress(0)
+, m_filedl(0)
 {
   m_ui->setupUi(this);
 
@@ -58,7 +59,7 @@ MainWidget::MainWidget(QWidget *parent)
   connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
   connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
   connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
-  connect(m_manager, SIGNAL(downloadProgress(int)), this, SLOT(downloadProgress(int)));
+  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
 
   Application *app = dynamic_cast<Application*>(qApp);
   connect(app, SIGNAL(keyPressed()), this, SLOT(nextStep()));
@@ -123,7 +124,7 @@ void MainWidget::checkMilestone()
   // Look for MD5 File
   if(m_destinationPath.isEmpty()) {
     QMessageBox::StandardButton button;
-    button = QMessageBox::question(this, tr("No existing database found"), tr("No existion Woodscan database found, do you want to select the directory manually?"));
+    button = QMessageBox::question(this, tr("No existing database found"), tr("No existing Woodscan database found, do you want to select the directory manually?"));
     if(button == QMessageBox::Yes) {
       m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
     } else {
@@ -160,22 +161,38 @@ void MainWidget::debugText(QString text)
   qDebug() << text;
 }
 
-void MainWidget::downloadProgress(int percentage)
+void MainWidget::downloadProgress(Download *dl, int percentage)
 {
-  static int msecs = 0;
+  static int msecs = 0;    
 
-  if(percentage > 0 && percentage < 100) {
-    if(msecs == 0 || QTime::currentTime().msecsSinceStartOfDay()-msecs > 10000) {
-      msecs = QTime::currentTime().msecsSinceStartOfDay();
-      m_ui->textEdit->clear();
-      printText(tr("Downloading: %1 %").arg(percentage) + NL);
+  if(dl == m_filedl) {
+    if(QFile::exists(m_destinationPath + DATAFILE)) {
+      QFileInfo info(m_destinationPath + DATAFILE);
+      if(dl->filesize()) {
+        if(dl->filesize() - info.size() > 0) {
+          if(availableDiskSpace(m_destinationPath) < dl->filesize() - info.size()) {
+            dl->pause();
+            m_ui->textEdit->clear();
+            printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
+            return;
+          }
+        }
+      }
+      QFile::remove(m_destinationPath + DATAFILE);
+    }
+
+    if(percentage > 0 && percentage < 100) {
+      if(msecs == 0 || QTime::currentTime().msecsSinceStartOfDay()-msecs > 10000) {
+        msecs = QTime::currentTime().msecsSinceStartOfDay();
+        m_ui->textEdit->clear();
+        printText(tr("Downloading: %1 %").arg(percentage) + NL);
+      }
     }
   }
 }
 
 void MainWidget::downloadFinished(Download *dl)
 {
-  static Download *filedl = 0;
   static int conversionProgress = 0;
 
   switch(m_mode) {
@@ -190,19 +207,18 @@ void MainWidget::downloadFinished(Download *dl)
 
       m_md5 = m_webdata;
       printText(tr("There is a newer WoodScan database. Starting download...") + NL);
-      QFile::remove(m_destinationPath + DATAFILE);
 
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
-      filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
+      m_filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
       m_checkProgress->start();
       printText(NL);
     }
     break;
   case mode_db:
-    if(dl != filedl) {
+    if(dl != m_filedl) {
       if(conversionProgress < QString(m_webdata).toInt()) {
-        filedl->timerStart(); // We got a progress of database generation, so restart timer.
+        m_filedl->timerStart(); // We got a progress of database generation, so restart timer.
       }
 
       conversionProgress = QString(m_webdata).toInt();
@@ -233,7 +249,7 @@ void MainWidget::downloadFinished(Download *dl)
 void MainWidget::downloadFailed(Download *dl)
 {
   m_ui->textEdit->clear();
-  printText(QString("Download error %1").arg(dl->error()) + NL);
+  printText(QString("Download error!").arg(dl->error()) + NL);
 }
 
 void MainWidget::nextStep()

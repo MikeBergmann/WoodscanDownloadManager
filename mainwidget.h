@@ -40,7 +40,7 @@ signals:
 private slots:
   void printText(QString text);
   void debugText(QString text);
-  void downloadProgress(int percentage);
+  void downloadProgress(Download *dl, int percentage);
   void downloadFinished(Download *dl);
   void downloadFailed(Download *dl);
   void nextStep(void);
@@ -67,6 +67,7 @@ private:
   QByteArray m_md5;
   QByteArray m_webdata;
   QTimer *m_checkProgress;
+  Download *m_filedl;
 };
 
 #endif // MAINWIDGET_H_

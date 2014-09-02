@@ -19,8 +19,6 @@
 
 #include "application.h"
 
-#include <QDebug>
-
 Application::Application(int &argc, char **argv)
   :QApplication(argc, argv)
 {
@@ -28,13 +26,9 @@ Application::Application(int &argc, char **argv)
 
 bool Application::notify(QObject *object, QEvent *event)
 {
-  //If this is keypress event , do not send it to the receiver
-  if(event->type() == QEvent::KeyPress)
-  {
-    qDebug() << "Received Key Press" << endl;
+  if(event->type() == QEvent::KeyPress) {
     emit keyPressed();
   }
 
   return QApplication::notify(object, event);
 }
-

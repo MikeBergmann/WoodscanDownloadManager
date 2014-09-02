@@ -38,7 +38,7 @@ signals:
   void printText(QString qsLine);
   void complete(Download *dl);
   void failed(Download *dl);
-  void downloadProgress(int percentage);
+  void downloadProgress(Download *dl, int percentage);
 
 public slots:
   Download* download(QUrl url, const QString &destinationPath);

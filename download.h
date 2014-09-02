@@ -65,6 +65,7 @@ public:
   void setError(QNetworkReply::NetworkError error);
   int errorCnt(void);
   QString filename(void);
+  int filesize(void);
 
 signals:
   void timeout(QNetworkReply *reply);

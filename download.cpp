@@ -247,7 +247,10 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *perc
 
 void Download::processFinished()
 {
-  QByteArray replyData = m_reply->readAll();
+  if(m_reply  == 0) {
+    return;
+  }
+
   m_error = m_reply->error();
   if(m_error != QNetworkReply::NoError) {
     m_errorCnt++;
@@ -272,6 +275,11 @@ int Download::errorCnt()
 QString Download::filename()
 {
   return m_fileName;
+}
+
+int Download::filesize()
+{
+  return m_totalSize;
 }
 
 void Download::timeout()

@@ -30,7 +30,6 @@ class Application : public QApplication
 public:
   Application(int &argc, char **argv);
 
-  // QCoreApplication interface
 public:
   bool notify(QObject *object, QEvent *event);
 
