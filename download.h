@@ -47,6 +47,7 @@ class Download : public DownloadBase {
 
 public:
   explicit Download(QUrl &url, QDataStream *stream = 0, QObject *parent = 0);
+  explicit Download(QUrl &url,const QString &destinationPath, QObject *parent = 0);
   virtual ~Download(void);
 
   void pause(void);
@@ -58,8 +59,10 @@ public:
   void relocate(void);
   void timerStart(void);
   void timerStop(void);
-  int processDownload(qint64 bytesReceived, qint64 bytesTotal);
+  int processDownload(qint64 bytesReceived, qint64 bytesTotal, int *percentage);
+  void processFinished(void);
   QNetworkReply::NetworkError error(void);
+  void setError(QNetworkReply::NetworkError error);
   int errorCnt(void);
   QString filename(void);
 
@@ -70,6 +73,7 @@ private slots:
   void timeout(void);
 
 private:
+  QString m_destinationPath;
   QString m_fileName;
   QFile *m_file;
   QDataStream *m_stream;

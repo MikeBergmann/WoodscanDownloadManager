@@ -37,6 +37,7 @@ DownloadBase::~DownloadBase()
 
 Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   : DownloadBase(parent)
+  , m_destinationPath()
   , m_fileName()
   , m_file(0)
   , m_stream(stream)
@@ -56,11 +57,17 @@ Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   m_pausedSize = 0;
 
   m_timer = new QTimer(this);
-  m_timer->setInterval(5000);
+  m_timer->setInterval(15000);
   m_timer->setSingleShot(true);
 
   // Timeout timer
   connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
+}
+
+Download::Download(QUrl &url, const QString &destinationPath, QObject *parent)
+  : Download(url, 0, parent)
+{
+  m_destinationPath = destinationPath;
 }
 
 Download::~Download()
@@ -133,11 +140,19 @@ void Download::parseHeader()
 
   if(!disposition.isEmpty()) {
     m_fileName = QString(disposition.split("filename=").at(1)).remove("\"");
+    if(!m_destinationPath.isEmpty()) {
+      m_fileName = m_destinationPath + "/" + m_fileName;
+    }
   }
 
   // Check if we get a relocation, this will happen if we request a download by a php script.
   if(m_reply->hasRawHeader("Location")) {
     m_newLocation = m_reply->rawHeader("Location");
+  }
+
+  m_error = m_reply->error();
+  if(m_error != QNetworkReply::NoError) {
+    m_errorCnt++;
   }
 }
 
@@ -207,7 +222,7 @@ void Download::timerStop()
   m_timer->stop();
 }
 
-int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal)
+int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *percentage)
 {
   m_downloadSize = m_pausedSize + bytesReceived;
   qDebug() << QTime::currentTime() << "Download Progress: Received=" << m_downloadSize << ": Total=" << m_pausedSize + bytesTotal;
@@ -216,20 +231,37 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal)
 
   // Do not stream to QDataStream because the stream makes some sort of
   // data encoding, use writeRawData instead.
-  m_stream->writeRawData(replyData.data(),replyData.size());
+  if(m_stream->writeRawData(replyData.data(),replyData.size()) < replyData.size()) {
+    return false;
+  }
 
   m_error = m_reply->error();
   if(m_error != QNetworkReply::NoError) {
     m_errorCnt++;
   }
 
-  int percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
-  return percentage;
+  *percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
+
+  return true;
+}
+
+void Download::processFinished()
+{
+  QByteArray replyData = m_reply->readAll();
+  m_error = m_reply->error();
+  if(m_error != QNetworkReply::NoError) {
+    m_errorCnt++;
+  }
 }
 
 QNetworkReply::NetworkError Download::error()
 {
   return m_error;
+}
+
+void Download::setError(QNetworkReply::NetworkError error)
+{
+  m_error = error;
 }
 
 int Download::errorCnt()

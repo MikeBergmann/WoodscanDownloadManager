@@ -26,6 +26,7 @@
 #include <QString>
 
 bool getMilestoneSerial(unsigned vid, unsigned pid, QString &serial, QString &drives);
+qint64 availableDiskSpace(const QString &driveVolume);
 
 #endif
 

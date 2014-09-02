@@ -24,7 +24,9 @@
 #include <QPushButton>
 #include <QInputDialog>
 #include <QFileDialog>
+#include <QTime>
 #include <QTimer>
+#include <QMessageBox>
 
 #include "download.h"
 #include "application.h"
@@ -78,6 +80,8 @@ void MainWidget::checkMilestone()
 {
   printText(tr("Welcome to the Bones Woodcann Download Manager!") + NL);
 
+  printText(tr("Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.") + NL);
+
   // Get attached Milestone and check if barcode database is installed
   if(!getMilestoneSerial(0xEF8,0x312, m_serial, m_drive))
     getMilestoneSerial(0xEF8,0x212, m_serial, m_drive);
@@ -85,15 +89,15 @@ void MainWidget::checkMilestone()
   if(m_serial.isEmpty()) {
     bool ok;
     m_serial = QInputDialog::getText(this, tr("Enter serial"),
-                                   tr("Please enter Milestone serial number:"), QLineEdit::Normal,
+                                   tr("No Milestone connected. Please enter Milestone serial number:"), QLineEdit::Normal,
                                    QString(), &ok);
     if (ok && !m_serial.isEmpty()) {
-      printText(tr("Milestone serial %1, device not connected").arg(m_serial) + NL);
+      printText(tr("Milestone serial %1, device not connected.").arg(m_serial) + NL);
     }
   } else {
       printText(tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drive.at(0)));
       if(m_drive.length()>1) {
-        printText(tr(" and %1").arg(m_drive.at(1) + NL));
+        printText(tr(" and %1.").arg(m_drive.at(1)) + NL);
       } else {
         printText(NL);
       }
@@ -118,7 +122,14 @@ void MainWidget::checkMilestone()
 
   // Look for MD5 File
   if(m_destinationPath.isEmpty()) {
-    m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
+    QMessageBox::StandardButton button;
+    button = QMessageBox::question(this, tr("No existing database found"), tr("No existion Woodscan database found, do you want to select the directory manually?"));
+    if(button == QMessageBox::Yes) {
+      m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
+    } else {
+      printText(tr("No destination directory. Aborting.") + NL);
+      return;
+    }
   }
 
   QFile md5file(m_destinationPath + MD5FILE);
@@ -151,8 +162,11 @@ void MainWidget::debugText(QString text)
 
 void MainWidget::downloadProgress(int percentage)
 {
+  static int msecs = 0;
+
   if(percentage > 0 && percentage < 100) {
-    if(percentage%5 == 0) {
+    if(msecs == 0 || QTime::currentTime().msecsSinceStartOfDay()-msecs > 10000) {
+      msecs = QTime::currentTime().msecsSinceStartOfDay();
       m_ui->textEdit->clear();
       printText(tr("Downloading: %1 %").arg(percentage) + NL);
     }
@@ -162,6 +176,7 @@ void MainWidget::downloadProgress(int percentage)
 void MainWidget::downloadFinished(Download *dl)
 {
   static Download *filedl = 0;
+  static int conversionProgress = 0;
 
   switch(m_mode) {
   case mode_md5:
@@ -175,37 +190,39 @@ void MainWidget::downloadFinished(Download *dl)
 
       m_md5 = m_webdata;
       printText(tr("There is a newer WoodScan database. Starting download...") + NL);
+      QFile::remove(m_destinationPath + DATAFILE);
 
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
-      filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode));
+      filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
       m_checkProgress->start();
       printText(NL);
     }
     break;
   case mode_db:
     if(dl != filedl) {
-      if(QString(m_webdata).toInt() != 100) {
-        if(QString(m_webdata).toInt() > 0) {
+      if(conversionProgress < QString(m_webdata).toInt()) {
+        filedl->timerStart(); // We got a progress of database generation, so restart timer.
+      }
+
+      conversionProgress = QString(m_webdata).toInt();
+      if(conversionProgress != 100) {
+        if(conversionProgress > 0) {
           m_ui->textEdit->clear();
           printText(tr("Generating database file: %1 %").arg(QString(m_webdata)) + NL);
         }
+
         m_checkProgress->start();
       }
     } else {
       m_mode = mode_none;
       m_ui->textEdit->clear();
-      printText("Download finished, copy files..." + NL);
+      printText("Download finished, good bye" + NL);
       QFile md5file(m_destinationPath + MD5FILE);
       if(md5file.open(QIODevice::WriteOnly)) {
         md5file.write(m_md5);
         md5file.close();
       }
-
-      QFile::remove(m_destinationPath + DATAFILE);
-      QFile::copy(dl->filename(), m_destinationPath + DATAFILE);
-      m_ui->textEdit->clear();
-      printText("Finished!" + NL);
     }
     break;
   default:

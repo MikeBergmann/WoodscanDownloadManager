@@ -66,12 +66,12 @@ void DownloadManager::downloadRequest(Download *dl)
   m_downloads.insert(dl->m_reply,dl);
 
   // Start timeout
-//  dl->timerStart();
+  dl->timerStart();
 }
 
-Download* DownloadManager::download(QUrl url)
+Download* DownloadManager::download(QUrl url, const QString &destinationPath)
 {
-  Download *dl = new Download(url);
+  Download *dl = new Download(url, destinationPath);
   downloadRequest(dl);
   return dl;
 }
@@ -115,7 +115,7 @@ void DownloadManager::doDownload(Download *dl)
   connect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
   // Start timeout
-//  dl->timerStart();
+  dl->timerStart();
 }
 
 void DownloadManager::gotHeader(void)
@@ -132,6 +132,10 @@ void DownloadManager::gotHeader(void)
 
   dl->parseHeader();
   if(dl->error()) {
+    if(dl->error() == QNetworkReply::QNetworkReply::ProtocolInvalidOperationError) {
+      emit failed(dl) ;
+      return;
+    }
     qDebug() << dl->error() << endl;
   }
 
@@ -155,21 +159,24 @@ void DownloadManager::finished(void)
   Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
 
   dl->timerStop();
+
+  dl->processFinished();
+
   dl->m_reply->deleteLater();
   dl->m_reply = 0;
 
   if(dl->error()) {
-    if(dl->errorCnt() < RETRYCNT) {
-      qDebug() << dl->error() << endl;
-      if(dl->error() == QNetworkReply::RemoteHostClosedError) {
+    if(dl->error() == QNetworkReply::RemoteHostClosedError) {
+      if(dl->errorCnt() < RETRYCNT) {
+        qDebug() << dl->error() << endl;
         doDownload(dl);
         return;
       }
-    } else {
-      dl->closeFile();
-      emit failed(dl) ;
-      return;
     }
+    dl->closeFile();
+    qDebug() <<  "Failed, retries:" << dl->errorCnt() << endl;
+    emit failed(dl);
+    return;
   }
 
   dl->closeFile();
@@ -183,7 +190,12 @@ void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
   Download *dl = m_downloads.value(reply);
 
   dl->timerStop();
-  int percentage = dl->processDownload(bytesReceived, bytesTotal);
+  int percentage;
+
+  if(!dl->processDownload(bytesReceived, bytesTotal, &percentage)) {
+    dl->m_reply->abort();
+    return;
+  }
 
   emit downloadProgress(percentage);
 
@@ -205,8 +217,9 @@ void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenti
 }
 
 void DownloadManager::timeout(QNetworkReply* reply)
-{
-  qDebug() << __FUNCTION__;
+{  
+  qDebug() << __FUNCTION__ << reply->url();
+  reply->abort();
   reply->deleteLater();
 }
 

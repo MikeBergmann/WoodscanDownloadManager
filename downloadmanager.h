@@ -41,7 +41,7 @@ signals:
   void downloadProgress(int percentage);
 
 public slots:
-  Download* download(QUrl url);
+  Download* download(QUrl url, const QString &destinationPath);
   Download* download(QUrl url, QByteArray *destination);
   void pause(Download *dl);
   void resume(Download *dl);

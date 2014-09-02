@@ -216,3 +216,19 @@ bool getMilestoneSerial(unsigned vid, unsigned pid, QString& serial, QString& dr
   return found;
 }
 
+qint64 availableDiskSpace(const QString &driveVolume)
+{
+    qint64 freeBytes;
+    qint64 totalBytes;
+    qint64 totalFreeBytes;
+
+    SetErrorMode(SEM_FAILCRITICALERRORS);
+
+    bool ok = GetDiskFreeSpaceEx((WCHAR *)driveVolume.utf16(),(PULARGE_INTEGER)&freeBytes, (PULARGE_INTEGER)&totalBytes, (PULARGE_INTEGER)&totalFreeBytes);
+
+    SetErrorMode(0);
+
+    if(!ok)
+        totalFreeBytes = 0;
+    return totalFreeBytes;
+}
