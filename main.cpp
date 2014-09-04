@@ -17,7 +17,7 @@
   along with WoodscanDownloadManager.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <QtGlobal>
+#include <QTranslator>
 
 #include "application.h"
 #include "mainwidget.h"
@@ -25,6 +25,10 @@
 int main(int argc, char *argv[])
 {
   Application a(argc, argv);
+
+  QTranslator translator;
+  translator.load(a.applicationName() + "_" + QLocale::system().name(), a.applicationDirPath());
+  a.installTranslator(&translator);
 
   MainWidget wid;
   wid.show();

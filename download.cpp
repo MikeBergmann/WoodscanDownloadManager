@@ -74,7 +74,7 @@ Download::~Download()
 {
   try {
     if(m_reply) {
-      pause();
+      stop();
     }
     delete m_request;
     closeFile();
@@ -83,11 +83,8 @@ Download::~Download()
   }
 }
 
-void Download::pause()
+void Download::stop()
 {
-  if(m_reply == 0) {
-    return;
-  }
   m_timer->stop();
 
   if(m_reply) {

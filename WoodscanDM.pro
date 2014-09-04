@@ -49,3 +49,5 @@ FORMS += \
 
 OTHER_FILES += \
     README.md
+
+TRANSLATIONS = WoodscanDM_de.ts

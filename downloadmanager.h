@@ -60,6 +60,7 @@ private:
 
   void doDownload(Download *dl);
   void downloadRequest(Download *dl);
+  void cleanupDownload(Download *dl);
 };
 
 #endif // DOWNLOADMANAGER_H_

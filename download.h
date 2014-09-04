@@ -50,7 +50,7 @@ public:
   explicit Download(QUrl &url,const QString &destinationPath, QObject *parent = 0);
   virtual ~Download(void);
 
-  void pause(void);
+  void stop(void);
   void fillRequestHeader(void);
   void parseHeader(void);
   void openFile(void);

@@ -32,9 +32,9 @@
 #include "application.h"
 
 #define NL QString("\n\r")
-#define PATH QString("/Barcode")
-#define MD5FILE QString("/germany.md5")
-#define DATAFILE QString("/germany.ebx")
+#define PATH QString("Barcode")
+#define MD5FILE QString("germany.md5")
+#define DATAFILE QString("germany.ebx")
 
 MainWidget::MainWidget(QWidget *parent)
 : QWidget(parent)
@@ -71,7 +71,7 @@ MainWidget::MainWidget(QWidget *parent)
   // Timeout timer
   connect(m_checkProgress, SIGNAL(timeout()), this, SLOT(checkProgress()));
 
-  // QueuedConnection because we want to finish constructur befor calling the slot.
+  // QueuedConnection because we want to finish constructor before calling the slot.
   connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);  
 
   emit start();
@@ -79,7 +79,7 @@ MainWidget::MainWidget(QWidget *parent)
 
 void MainWidget::checkMilestone()
 {
-  printText(tr("Welcome to the Bones Woodcann Download Manager!") + NL);
+  printText(tr("Welcome to the Bones Woodscan Download Manager!") + NL);
 
   printText(tr("Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.") + NL);
 
@@ -110,11 +110,11 @@ void MainWidget::checkMilestone()
   }
 
   if(!m_drive.isEmpty()) {
-    m_destinationPath = m_drive.at(0) + ':' + PATH;
-    if(!QFileInfo(m_destinationPath + MD5FILE).exists()) {
+    m_destinationPath = QString(m_drive.at(0)) + ":/" + PATH;
+    if(!QFileInfo(m_destinationPath + "/" + MD5FILE).exists()) {
       if(m_drive.size() > 1) {
-        m_destinationPath = m_drive.at(1) + ':' + PATH;
-        if(!QFileInfo(m_destinationPath + MD5FILE).exists()) {
+        m_destinationPath = QString(m_drive.at(1)) + ":/" + PATH;
+        if(!QFileInfo(m_destinationPath + "/" + MD5FILE).exists()) {
           m_destinationPath.clear();
         }
       }
@@ -127,13 +127,17 @@ void MainWidget::checkMilestone()
     button = QMessageBox::question(this, tr("No existing database found"), tr("No existing Woodscan database found, do you want to select the directory manually?"));
     if(button == QMessageBox::Yes) {
       m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
+      if(m_destinationPath.isEmpty()) {
+        printText(tr("No destination directory. Aborting.") + NL);
+        return;
+      }
     } else {
       printText(tr("No destination directory. Aborting.") + NL);
       return;
     }
   }
 
-  QFile md5file(m_destinationPath + MD5FILE);
+  QFile md5file(m_destinationPath + "/" + MD5FILE);
   if(md5file.exists()) {
     if(md5file.open(QIODevice::ReadOnly)) {
       m_md5 = md5file.readAll();
@@ -166,19 +170,19 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
   static int msecs = 0;    
 
   if(dl == m_filedl) {
-    if(QFile::exists(m_destinationPath + DATAFILE)) {
-      QFileInfo info(m_destinationPath + DATAFILE);
+    if(QFile::exists(m_destinationPath + "/" + DATAFILE)) {
+      QFileInfo info(m_destinationPath + "/" + DATAFILE);
       if(dl->filesize()) {
-        if(dl->filesize() - info.size() > 0) {
-          if(availableDiskSpace(m_destinationPath) < dl->filesize() - info.size()) {
-            dl->pause();
+        if(dl->filesize() > info.size()) {
+          if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
+            dl->stop();
             m_ui->textEdit->clear();
             printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
             return;
           }
         }
       }
-      QFile::remove(m_destinationPath + DATAFILE);
+      QFile::remove(m_destinationPath + "/" + DATAFILE);
     }
 
     if(percentage > 0 && percentage < 100) {
@@ -232,12 +236,18 @@ void MainWidget::downloadFinished(Download *dl)
       }
     } else {
       m_mode = mode_none;
-      m_ui->textEdit->clear();
-      printText("Download finished, good bye" + NL);
-      QFile md5file(m_destinationPath + MD5FILE);
-      if(md5file.open(QIODevice::WriteOnly)) {
-        md5file.write(m_md5);
-        md5file.close();
+      QFile file(dl->filename());
+      if(!file.rename(DATAFILE)) {
+        m_ui->textEdit->clear();
+        printText("Rename failed!" + NL);
+      } else {
+        m_ui->textEdit->clear();
+        printText("Download finished, good bye." + NL);
+        QFile md5file(m_destinationPath + "/" + MD5FILE);
+        if(md5file.open(QIODevice::WriteOnly)) {
+          md5file.write(m_md5);
+          md5file.close();
+        }
       }
     }
     break;

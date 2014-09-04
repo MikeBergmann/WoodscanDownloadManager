@@ -69,6 +69,26 @@ void DownloadManager::downloadRequest(Download *dl)
   dl->timerStart();
 }
 
+void DownloadManager::cleanupDownload(Download *dl)
+{
+  if(dl->m_reply) {
+    disconnect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
+    disconnect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
+    disconnect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
+    if(dl->m_reply->isRunning()) {
+      dl->m_reply->abort();
+    }
+    m_downloads.remove(dl->m_reply);
+    dl->m_reply->deleteLater();
+    dl->m_reply = 0;
+  } else {
+    QList<QNetworkReply*> managed = m_downloads.keys(dl);
+    if(managed.count()) {
+      m_downloads.remove(managed.at(0));
+    }
+  }
+}
+
 Download* DownloadManager::download(QUrl url, const QString &destinationPath)
 {
   Download *dl = new Download(url, destinationPath);
@@ -85,11 +105,7 @@ Download* DownloadManager::download(QUrl url, QByteArray *destination)
 
 void DownloadManager::pause(Download *dl)
 {
-  disconnect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
-  disconnect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
-  disconnect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
-
-  dl->pause();
+  dl->stop();
 }
 
 void DownloadManager::resume(Download *dl)
@@ -99,13 +115,11 @@ void DownloadManager::resume(Download *dl)
 
 void DownloadManager::doDownload(Download *dl)
 {
+  // Download file
   dl->fillRequestHeader();
 
-  // Download file
-  if(dl->m_reply) {
-    m_downloads.remove(dl->m_reply);
-    dl->m_reply->deleteLater();
-  }
+  // Cleanup old existion download (if there is one)
+  cleanupDownload(dl);
 
   dl->m_reply = m_manager->get(*(dl->m_request));
   m_downloads.insert(dl->m_reply, dl);
@@ -139,18 +153,14 @@ void DownloadManager::gotHeader(void)
     qDebug() << dl->error() << endl;
   }
 
-  m_downloads.remove(dl->m_reply);
-  dl->m_reply->deleteLater();
-  dl->m_reply = 0;
-
   if(dl->checkRelocation()) {
     dl->relocate();
+    cleanupDownload(dl);
     downloadRequest(dl);
     return;
   }
 
   dl->openFile();
-
   doDownload(dl);
 }
 
@@ -159,20 +169,20 @@ void DownloadManager::finished(void)
   Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
 
   dl->timerStop();
-
   dl->processFinished();
 
-  dl->m_reply->deleteLater();
-  dl->m_reply = 0;
+  cleanupDownload(dl);
+
+  if(dl->error() == QNetworkReply::RemoteHostClosedError) {
+    if(dl->errorCnt() < RETRYCNT) {
+      qDebug() << dl->error() << endl;
+      pause(dl);
+      doDownload(dl);
+      return;
+    }
+  }
 
   if(dl->error()) {
-    if(dl->error() == QNetworkReply::RemoteHostClosedError) {
-      if(dl->errorCnt() < RETRYCNT) {
-        qDebug() << dl->error() << endl;
-        doDownload(dl);
-        return;
-      }
-    }
     dl->closeFile();
     qDebug() <<  "Failed, retries:" << dl->errorCnt() << endl;
     emit failed(dl);
