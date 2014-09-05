@@ -60,7 +60,7 @@ private:
   QString m_url;
   QString m_urlParameter;
   QString m_serial;
-  QString m_drive;
+  QString m_drives;
   QString m_destinationPath;
   Modes m_mode;
   DownloadManager *m_manager;

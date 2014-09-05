@@ -42,7 +42,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_url()
 , m_urlParameter()
 , m_serial()
-, m_drive()
+, m_drives()
 , m_destinationPath()
 , m_manager(0)
 , m_md5()
@@ -83,9 +83,11 @@ void MainWidget::checkMilestone()
 
   printText(tr("Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.") + NL);
 
+  printText(tr("Aditionally, please close all other open applications, because applications locking files on your Milestone may cause the download to fail.") + NL);
+
   // Get attached Milestone and check if barcode database is installed
-  if(!getMilestoneSerial(0xEF8,0x312, m_serial, m_drive))
-    getMilestoneSerial(0xEF8,0x212, m_serial, m_drive);
+  if(!getMilestoneSerial(0xEF8,0x312, m_serial, m_drives))
+    getMilestoneSerial(0xEF8,0x212, m_serial, m_drives);
 
   if(m_serial.isEmpty()) {
     bool ok;
@@ -96,9 +98,9 @@ void MainWidget::checkMilestone()
       printText(tr("Milestone serial %1, device not connected.").arg(m_serial) + NL);
     }
   } else {
-      printText(tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drive.at(0)));
-      if(m_drive.length()>1) {
-        printText(tr(" and %1.").arg(m_drive.at(1)) + NL);
+      printText(tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drives.at(0)));
+      if(m_drives.length()>1) {
+        printText(tr(" and %1.").arg(m_drives.at(1)) + NL);
       } else {
         printText(NL);
       }
@@ -109,11 +111,11 @@ void MainWidget::checkMilestone()
     return;
   }
 
-  if(!m_drive.isEmpty()) {
-    m_destinationPath = QString(m_drive.at(0)) + ":/" + PATH;
+  if(!m_drives.isEmpty()) {
+    m_destinationPath = QString(m_drives.at(0)) + ":/" + PATH;
     if(!QFileInfo(m_destinationPath + "/" + MD5FILE).exists()) {
-      if(m_drive.size() > 1) {
-        m_destinationPath = QString(m_drive.at(1)) + ":/" + PATH;
+      if(m_drives.size() > 1) {
+        m_destinationPath = QString(m_drives.at(1)) + ":/" + PATH;
         if(!QFileInfo(m_destinationPath + "/" + MD5FILE).exists()) {
           m_destinationPath.clear();
         }
@@ -123,17 +125,31 @@ void MainWidget::checkMilestone()
 
   // Look for MD5 File
   if(m_destinationPath.isEmpty()) {
+
+    if(availableDiskSpace(QString(m_drives.at(0)) + ":/") > availableDiskSpace(QString(m_drives.at(1)) + ":/")) {
+      m_destinationPath =QString( m_drives.at(0)) + ":/" + PATH;
+    } else {
+      m_destinationPath = QString(m_drives.at(1)) + ":/" + PATH;
+    }
+
     QMessageBox::StandardButton button;
-    button = QMessageBox::question(this, tr("No existing database found"), tr("No existing Woodscan database found, do you want to select the directory manually?"));
+    button = QMessageBox::question(this, tr("No existing database found"),
+                                   tr("No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you."),
+                                   QMessageBox::Yes|QMessageBox::No, QMessageBox::No);
     if(button == QMessageBox::Yes) {
-      m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"));
+      m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"), m_destinationPath);
       if(m_destinationPath.isEmpty()) {
         printText(tr("No destination directory. Aborting.") + NL);
         return;
       }
-    } else {
-      printText(tr("No destination directory. Aborting.") + NL);
-      return;
+    }
+
+    QDir dir(m_destinationPath);
+    if(!dir.exists()) {
+      if(!dir.mkpath(m_destinationPath)) {
+        printText(tr("No destination directory. Aborting.") + NL);
+        return;
+      }
     }
   }
 
@@ -168,21 +184,25 @@ void MainWidget::debugText(QString text)
 void MainWidget::downloadProgress(Download *dl, int percentage)
 {
   static int msecs = 0;    
+  static bool firstrun = true;
 
   if(dl == m_filedl) {
-    if(QFile::exists(m_destinationPath + "/" + DATAFILE)) {
-      QFileInfo info(m_destinationPath + "/" + DATAFILE);
-      if(dl->filesize()) {
-        if(dl->filesize() > info.size()) {
-          if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
-            dl->stop();
-            m_ui->textEdit->clear();
-            printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
-            return;
+    if(firstrun) {
+      firstrun = false;
+      if(QFile::exists(m_destinationPath + "/" + DATAFILE)) {
+        QFileInfo info(m_destinationPath + "/" + DATAFILE);
+        if(dl->filesize()) {
+          if(dl->filesize() > info.size()) {
+            if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
+              dl->stop();
+              m_ui->textEdit->clear();
+              printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
+              return;
+            }
           }
         }
+        QFile::remove(m_destinationPath + "/" + DATAFILE);
       }
-      QFile::remove(m_destinationPath + "/" + DATAFILE);
     }
 
     if(percentage > 0 && percentage < 100) {
@@ -237,12 +257,12 @@ void MainWidget::downloadFinished(Download *dl)
     } else {
       m_mode = mode_none;
       QFile file(dl->filename());
-      if(!file.rename(DATAFILE)) {
+      if(!file.rename(m_destinationPath + "/" + DATAFILE)) {
         m_ui->textEdit->clear();
-        printText("Rename failed!" + NL);
+        printText(tr("Rename failed (%1 %2)!").arg(file.errorString()).arg(file.error()) + NL);
       } else {
         m_ui->textEdit->clear();
-        printText("Download finished, good bye." + NL);
+        printText(tr("Download finished, good bye.") + NL);
         QFile md5file(m_destinationPath + "/" + MD5FILE);
         if(md5file.open(QIODevice::WriteOnly)) {
           md5file.write(m_md5);
@@ -259,7 +279,10 @@ void MainWidget::downloadFinished(Download *dl)
 void MainWidget::downloadFailed(Download *dl)
 {
   m_ui->textEdit->clear();
-  printText(QString("Download error!").arg(dl->error()) + NL);
+  printText(tr("Download error!").arg(dl->error()) + NL);
+  printText(tr("Please check if you are eligible to download a new database for your Milestone.") + NL);
+  printText(tr("Additionally please make sure the destination directory is not write protected and has enough free space.") + NL);
+  printText(tr("Please restart this application to try again.") + NL);
 }
 
 void MainWidget::nextStep()
