@@ -153,6 +153,13 @@ void MainWidget::checkMilestone()
     }
   }
 
+  QDir dir(m_destinationPath);
+  dir.setNameFilters(QStringList("*.part"));
+  dir.setFilter(QDir::Files);
+  foreach(QString dirFile, dir.entryList()) {
+      dir.remove(dirFile);
+  }
+
   QFile md5file(m_destinationPath + "/" + MD5FILE);
   if(md5file.exists()) {
     if(md5file.open(QIODevice::ReadOnly)) {
