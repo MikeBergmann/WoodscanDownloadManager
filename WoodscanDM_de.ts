@@ -19,7 +19,7 @@
     <message>
         <location filename="mainwidget.cpp" line="84"/>
         <source>Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.</source>
-        <translation>Bitte stellen Sie sicher, dass Sie ein Backup Ihrer Datenbank angelegt haben. Dieses Werkzeug wird Ihrer bestehende Datenbank ersetzen.</translation>
+        <translation>Bitte stellen Sie sicher, dass Sie ein Backup Ihrer Datenbank angelegt haben. Dieses Werkzeug wird Ihre bestehende Datenbank ersetzen.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="86"/>
@@ -68,28 +68,28 @@
     <message>
         <location filename="mainwidget.cpp" line="136"/>
         <source>No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you.</source>
-        <translation>Es wurde keine existierende Woodscan Datenbank auf Ihrem Gerät gefunden, wollen Sie den Pfad manuell angeben? Wenn Sie das nicht wollen werde ich automatisch einen geeigneten Pfad auf Ihrem Gerät wählen.</translation>
+        <translation>Es wurde keine existierende Woodscan Datenbank auf Ihrem Gerät gefunden, wollen Sie den Pfad manuell angeben? Wenn Sie das nicht wollen, wird automatisch ein geeigneter Pfad auf Ihrem Gerät gewählt.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="138"/>
         <source>Please select destination directory</source>
-        <translation>Bitte Zielverzeichniss wählen</translation>
+        <translation>Bitte Zielverzeichnis wählen</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="140"/>
         <location filename="mainwidget.cpp" line="148"/>
         <source>No destination directory. Aborting.</source>
-        <translation>Kein Zielverzeichniss. Abbruch.</translation>
+        <translation>Kein Zielverzeichnis. Abbruch.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="163"/>
         <source>I&apos;m now going online to check if a new WoodScan database is available. Please press a key to continue.</source>
-        <translation>Es wird nun geprüft ob eine neuere Woodscan Datenbank verfügbar ist, bitte betätigen Sie eine Taste um fortzufahren.</translation>
+        <translation>Es wird nun geprüft ob eine neuere Woodscan Datenbank verfügbar ist. Bitte betätigen Sie eine Taste um fortzufahren.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="197"/>
         <source>Not enough free disk space in %1. Aborting.</source>
-        <translation>In dem Zielpfad %1 steht nicht genügend Speicherplatz zur verfügung. Abbruch.</translation>
+        <translation>In dem Zielpfad %1 steht nicht genügend Speicherplatz zur Verfügung. Abbruch.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="210"/>
@@ -109,17 +109,17 @@
     <message>
         <location filename="mainwidget.cpp" line="250"/>
         <source>Generating database file: %1 %</source>
-        <translation>Generiere Datenbank: %1 %</translation>
+        <translation>Datenbank wird generiert: %1 %</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="260"/>
         <source>Rename failed (%1 %2)!</source>
-        <translation>Umbennenen Fehlgeschlagen (%1 %2)!</translation>
+        <translation>Umbenennen fehlgeschlagen (%1 %2)!</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="263"/>
         <source>Download finished, good bye.</source>
-        <translation>Download beendet. Wir wünschen einen schönen Tag.</translation>
+        <translation>Download beendet. Wir wünschen Ihnen einen schönen Tag.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="280"/>
@@ -129,12 +129,12 @@
     <message>
         <location filename="mainwidget.cpp" line="281"/>
         <source>Please check if you are eligible to download a new database for your Milestone.</source>
-        <translation>Bitte prüfen Sie, ob Sie bezüglich der Woodscan Datenbank für diesen Milestone update berechtigt sind.</translation>
+        <translation>Bitte prüfen Sie, ob Sie für ein Update der Woodscan Datenbank für diesen Milestone berechtigt sind.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="282"/>
         <source>Additionally please make sure the destination directory is not write protected and has enough free space.</source>
-        <translation>Stellen Sie bitte zusätzlich sicher, dass das Ziellaufwerk nicht schreibgeschützt ist und genügend Speicherplatz zur verfügung steht.</translation>
+        <translation>Stellen Sie bitte zusätzlich sicher, dass das Ziellaufwerk nicht schreibgeschützt ist und genügend Speicherplatz zur Verfügung steht.</translation>
     </message>
     <message>
         <location filename="mainwidget.cpp" line="283"/>
