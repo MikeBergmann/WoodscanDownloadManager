@@ -19,7 +19,7 @@
 QT       += network widgets
 
 TARGET = WoodscanDM
-CONFIG   += console
+# CONFIG   += console
 
 TEMPLATE = app
 
