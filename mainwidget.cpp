@@ -27,6 +27,8 @@
 #include <QTime>
 #include <QTimer>
 #include <QMessageBox>
+#include <QStandardPaths>
+#include <QSettings>
 
 #include "download.h"
 #include "application.h"
@@ -126,10 +128,12 @@ void MainWidget::checkMilestone()
   // Look for MD5 File
   if(m_destinationPath.isEmpty()) {
 
-    if(availableDiskSpace(QString(m_drives.at(0)) + ":/") > availableDiskSpace(QString(m_drives.at(1)) + ":/")) {
-      m_destinationPath =QString( m_drives.at(0)) + ":/" + PATH;
+    if(m_drives.length() > 1 && availableDiskSpace(QString(m_drives.at(0)) + ":/") < availableDiskSpace(QString(m_drives.at(1)) + ":/")) {
+      m_destinationPath =QString( m_drives.at(1)) + ":/" + PATH;
+    } else if(!m_drives.isEmpty()) {
+      m_destinationPath = QString(m_drives.at(0)) + ":/" + PATH;
     } else {
-      m_destinationPath = QString(m_drives.at(1)) + ":/" + PATH;
+      m_destinationPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     }
 
     QMessageBox::StandardButton button;
@@ -160,11 +164,12 @@ void MainWidget::checkMilestone()
       dir.remove(dirFile);
   }
 
-  QFile md5file(m_destinationPath + "/" + MD5FILE);
-  if(md5file.exists()) {
-    if(md5file.open(QIODevice::ReadOnly)) {
-      m_md5 = md5file.readAll();
-      md5file.close();
+  QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
+  if(md5file.contains("Serial")) {
+    if(md5file.value("Serial").toString() == m_serial) {
+      if(md5file.contains("MD5")) {
+        m_md5 = md5file.value("MD5").toByteArray();
+      }
     }
   }
 
@@ -209,10 +214,19 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
           }
         }
         QFile::remove(m_destinationPath + "/" + DATAFILE);
+      } else {
+        if(dl->filesize()) {
+          if(availableDiskSpace(m_destinationPath) < dl->filesize()) {
+            dl->stop();
+            m_ui->textEdit->clear();
+            printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
+            return;
+          }
+        }
       }
     }
 
-    if(percentage > 0 && percentage < 100) {
+    if(percentage >= 0 && percentage < 100) {
       if(msecs == 0 || QTime::currentTime().msecsSinceStartOfDay()-msecs > 10000) {
         msecs = QTime::currentTime().msecsSinceStartOfDay();
         m_ui->textEdit->clear();
@@ -230,6 +244,11 @@ void MainWidget::downloadFinished(Download *dl)
   case mode_md5:
     {
       qDebug() << "Checksum of online database:" << m_webdata << endl;
+      if(m_webdata.isEmpty()) {
+        printText(tr("Can not connect to Bones Webservice, please try again later.") + NL);
+        m_mode = mode_none;
+        return;
+      }
       if(m_webdata == m_md5) {
         printText(tr("You already have the newest WoodScan database.") + NL);
         m_mode = mode_none;
@@ -270,11 +289,11 @@ void MainWidget::downloadFinished(Download *dl)
       } else {
         m_ui->textEdit->clear();
         printText(tr("Download finished, good bye.") + NL);
-        QFile md5file(m_destinationPath + "/" + MD5FILE);
-        if(md5file.open(QIODevice::WriteOnly)) {
-          md5file.write(m_md5);
-          md5file.close();
-        }
+
+        QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
+        md5file.setValue("Serial",m_serial);
+        md5file.setValue("MD5", m_md5);
+        md5file.sync();
       }
     }
     break;
@@ -285,8 +304,9 @@ void MainWidget::downloadFinished(Download *dl)
 
 void MainWidget::downloadFailed(Download *dl)
 {
+  qDebug() << "Error:" << dl->error();
   m_ui->textEdit->clear();
-  printText(tr("Download error!").arg(dl->error()) + NL);
+  printText(tr("Download error!") + NL);
   printText(tr("Please check if you are eligible to download a new database for your Milestone.") + NL);
   printText(tr("Additionally please make sure the destination directory is not write protected and has enough free space.") + NL);
   printText(tr("Please restart this application to try again.") + NL);
