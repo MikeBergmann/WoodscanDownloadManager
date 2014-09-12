@@ -146,7 +146,7 @@ void DownloadManager::gotHeader(void)
 
   dl->parseHeader();
   if(dl->error()) {
-    if(dl->error() == QNetworkReply::QNetworkReply::ProtocolInvalidOperationError) {
+    if(dl->error() == QNetworkReply::ProtocolInvalidOperationError) {
       emit failed(dl) ;
       return;
     }
