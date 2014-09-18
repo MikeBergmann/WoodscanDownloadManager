@@ -17,7 +17,6 @@
 #  along with WoodscanDownloadManager.  If not, see <http://www.gnu.org/licenses/>.
 
 QT       += network widgets
-
 TARGET = WoodscanDM
 # CONFIG   += console
 
@@ -34,15 +33,13 @@ SOURCES += \
     mainwidget.cpp \
     downloadmanager.cpp \
     milestone.cpp \
-    download.cpp \
-    application.cpp
+    download.cpp
 
 HEADERS += \
     mainwidget.h \
     downloadmanager.h \
     milestone.h \
-    download.h \
-    application.h
+    download.h
 
 FORMS += \
     form.ui
@@ -51,3 +48,8 @@ OTHER_FILES += \
     README.md
 
 TRANSLATIONS = WoodscanDM_de.ts
+
+RC_FILE = WoodscanDM.rc
+
+RESOURCES += \
+    WoodscanDM.qrc

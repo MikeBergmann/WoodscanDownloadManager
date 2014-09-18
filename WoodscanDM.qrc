@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/Bones">
+        <file>WoodscanDM.ico</file>
+    </qresource>
+</RCC>

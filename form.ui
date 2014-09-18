@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>742</width>
-    <height>491</height>
+    <width>276</width>
+    <height>276</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,22 +15,19 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QTextEdit" name="textEdit">
-     <property name="font">
-      <font>
-       <pointsize>12</pointsize>
-      </font>
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string/>
      </property>
-     <property name="readOnly">
-      <bool>true</bool>
+     <property name="pixmap">
+      <pixmap resource="WoodscanDM.qrc">:/Bones/WoodscanDM.ico</pixmap>
      </property>
     </widget>
    </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout"/>
-   </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="WoodscanDM.qrc"/>
+ </resources>
  <connections/>
 </ui>

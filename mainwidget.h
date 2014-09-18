@@ -24,6 +24,10 @@
 
 #include "downloadmanager.h"
 
+class QProgressDialog;
+class QSystemTrayIcon;
+class QMenu;
+
 namespace Ui {
   class Form;
 }
@@ -38,7 +42,6 @@ signals:
   void start(void);
 
 private slots:
-  void printText(QString text);
   void debugText(QString text);
   void downloadProgress(Download *dl, int percentage);
   void downloadFinished(Download *dl);
@@ -68,6 +71,15 @@ private:
   QByteArray m_webdata;
   QTimer *m_checkProgress;
   Download *m_filedl;
+  QProgressDialog *m_progress;
+  QSystemTrayIcon *m_trayIcon;
+  QMenu *m_trayIconMenu;
+  QAction *m_quitAction;
+
+  void createTrayIcon();
+  void createActions();
+
+  void critical(QString &text, Download *dl);
 };
 
 #endif // MAINWIDGET_H_

@@ -29,11 +29,14 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QSettings>
+#include <QProgressDialog>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QApplication>
 
 #include "download.h"
-#include "application.h"
 
-#define NL QString("\n\r")
+#define NL QString("\n")
 #define PATH QString("Barcode")
 #define MD5FILE QString("germany.md5")
 #define DATAFILE QString("germany.ebx")
@@ -51,6 +54,10 @@ MainWidget::MainWidget(QWidget *parent)
 , m_webdata()
 , m_checkProgress(0)
 , m_filedl(0)
+, m_progress(0)
+, m_trayIcon(0)
+, m_trayIconMenu(0)
+, m_quitAction(0)
 {
   m_ui->setupUi(this);
 
@@ -58,13 +65,9 @@ MainWidget::MainWidget(QWidget *parent)
   m_urlParameter = "?serial=%1&rType=%2";
 
   m_manager = new DownloadManager(this);
-  connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
   connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
   connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
   connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
-
-  Application *app = dynamic_cast<Application*>(qApp);
-  connect(app, SIGNAL(keyPressed()), this, SLOT(nextStep()));
 
   m_checkProgress = new QTimer(this);
   m_checkProgress->setInterval(5000);
@@ -76,16 +79,56 @@ MainWidget::MainWidget(QWidget *parent)
   // QueuedConnection because we want to finish constructor before calling the slot.
   connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);  
 
+  m_progress = new QProgressDialog(tr("Download..."),tr("Cancel"),0,100,this);
+  m_progress->setWindowModality(Qt::WindowModal);
+  m_progress->setMinimumDuration(0);
+
+  createActions();
+  createTrayIcon();
+
+  m_trayIcon->setIcon(QIcon(":/Bones/WoodscanDM.ico"));
+  m_trayIcon->show();
+
+  setVisible(false);
+
   emit start();
+}
+
+void MainWidget::createActions()
+{
+  m_quitAction = new QAction(tr("&Quit"), this);
+  connect(m_quitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
+}
+
+void MainWidget::critical(QString &text, Download *dl)
+{
+  disconnect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+  disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+  disconnect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+
+  if(dl) {
+    dl->stop();
+  }
+  QMessageBox::critical(this,"",text);
+  qApp->quit();
+}
+
+void MainWidget::createTrayIcon()
+{
+  m_trayIconMenu = new QMenu(this);
+  m_trayIconMenu->addAction(m_quitAction);
+
+  m_trayIcon = new QSystemTrayIcon(this);
+  m_trayIcon->setContextMenu(m_trayIconMenu);
 }
 
 void MainWidget::checkMilestone()
 {
-  printText(tr("Welcome to the Bones Woodscan Download Manager!") + NL);
+  QString text;
 
-  printText(tr("Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.") + NL);
-
-  printText(tr("Aditionally, please close all other open applications, because applications locking files on your Milestone may cause the download to fail.") + NL);
+  text += tr("Welcome to the Bones Woodscan Download Manager!") + NL + NL;
+  text += tr("Please make sure you have a backup of you Woodscan database. This Tools will replace your old database.") + NL + NL;
+  text += tr("Aditionally, please close all other open applications, because applications locking files on your Milestone may cause the download to fail.") + NL + NL;
 
   // Get attached Milestone and check if barcode database is installed
   if(!getMilestoneSerial(0xEF8,0x312, m_serial, m_drives))
@@ -97,19 +140,19 @@ void MainWidget::checkMilestone()
                                    tr("No Milestone connected. Please enter Milestone serial number:"), QLineEdit::Normal,
                                    QString(), &ok);
     if (ok && !m_serial.isEmpty()) {
-      printText(tr("Milestone serial %1, device not connected.").arg(m_serial) + NL);
+      text += tr("Milestone serial %1, device not connected.").arg(m_serial) + NL;
     }
   } else {
-      printText(tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drives.at(0)));
+      text += tr("Milestone with serial %1 connected as drive %2").arg(m_serial).arg(m_drives.at(0));
       if(m_drives.length()>1) {
-        printText(tr(" and %1.").arg(m_drives.at(1)) + NL);
+        text += tr(" and %1.").arg(m_drives.at(1)) + NL + NL;
       } else {
-        printText(NL);
+        text += NL;
       }
   }
 
   if(m_serial.isEmpty()) {
-    printText(tr("No Milestone serial number. Aborting.") + NL);
+    text += tr("No Milestone serial number. Aborting.") + NL;
     return;
   }
 
@@ -121,6 +164,8 @@ void MainWidget::checkMilestone()
         if(!QFileInfo(m_destinationPath + "/" + MD5FILE).exists()) {
           m_destinationPath.clear();
         }
+      } else {
+        m_destinationPath.clear();
       }
     }
   }
@@ -137,21 +182,34 @@ void MainWidget::checkMilestone()
     }
 
     QMessageBox::StandardButton button;
+    QMessageBox box(this);
+    box.setText(tr("No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you."));
+    box.setStandardButtons(QMessageBox::Yes|QMessageBox::No);
+    box.button(QMessageBox::Yes)->setText(tr("Choose myself"));
+    box.button(QMessageBox::No)->setText(tr("Let the tool decide"));
+    box.setIcon(QMessageBox::Question);
+    box.setModal(true);
+
+    box.exec();
+    button = box.clickedButton() == box.button(QMessageBox::Yes) ? QMessageBox::Yes : QMessageBox::No;
+
+/*
     button = QMessageBox::question(this, tr("No existing database found"),
                                    tr("No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you."),
                                    QMessageBox::Yes|QMessageBox::No, QMessageBox::No);
+*/
     if(button == QMessageBox::Yes) {
-      m_destinationPath = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"), m_destinationPath);
-      if(m_destinationPath.isEmpty()) {
-        printText(tr("No destination directory. Aborting.") + NL);
-        return;
+      QString path = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"), m_destinationPath);
+      if(!m_destinationPath.isEmpty()) {
+        m_destinationPath = path;
       }
     }
 
     QDir dir(m_destinationPath);
     if(!dir.exists()) {
       if(!dir.mkpath(m_destinationPath)) {
-        printText(tr("No destination directory. Aborting.") + NL);
+        text += tr("No destination directory. Aborting.");
+        critical(text, 0);
         return;
       }
     }
@@ -174,18 +232,21 @@ void MainWidget::checkMilestone()
   }
 
   m_mode = mode_md5;
-  printText(tr("I'm now going online to check if a new WoodScan database is available. Please press a key to continue.") + NL);
+
+  text += tr("I'm now going online to check if a new WoodScan database is available. Please confirm to continue.") + NL;
+
+  QMessageBox::StandardButton ret = QMessageBox::information(this,"",text,QMessageBox::Ok, QMessageBox::Cancel);
+  if(ret == QMessageBox::Ok) {
+    nextStep();
+  } else {
+    qApp->quit();
+  }
 }
 
 void MainWidget::checkProgress()
 {
   m_webdata.clear();
   m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
-}
-
-void MainWidget::printText(QString text)
-{
-  m_ui->textEdit->textCursor().insertText(text);
 }
 
 void MainWidget::debugText(QString text)
@@ -195,7 +256,7 @@ void MainWidget::debugText(QString text)
 
 void MainWidget::downloadProgress(Download *dl, int percentage)
 {
-  static int msecs = 0;    
+  QString text;
   static bool firstrun = true;
 
   if(dl == m_filedl) {
@@ -206,9 +267,8 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
         if(dl->filesize()) {
           if(dl->filesize() > info.size()) {
             if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
-              dl->stop();
-              m_ui->textEdit->clear();
-              printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
+              text = tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL;
+              critical(text, dl);
               return;
             }
           }
@@ -217,20 +277,21 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
       } else {
         if(dl->filesize()) {
           if(availableDiskSpace(m_destinationPath) < dl->filesize()) {
-            dl->stop();
-            m_ui->textEdit->clear();
-            printText(tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL);
+            text = tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL;
+            critical(text, dl);
             return;
           }
         }
       }
     }
 
-    if(percentage >= 0 && percentage < 100) {
-      if(msecs == 0 || QTime::currentTime().msecsSinceStartOfDay()-msecs > 10000) {
-        msecs = QTime::currentTime().msecsSinceStartOfDay();
-        m_ui->textEdit->clear();
-        printText(tr("Downloading: %1 %").arg(percentage) + NL);
+    if(percentage >= 0 && percentage < 100) {      
+      m_progress->setLabelText(tr("Download..."));
+      m_progress->setValue(percentage);
+      if(m_progress->wasCanceled()) {
+        m_manager->pause(dl);
+        qApp->quit();
+        return;
       }
     }
   }
@@ -239,30 +300,32 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
 void MainWidget::downloadFinished(Download *dl)
 {
   static int conversionProgress = 0;
+  QString text;
 
   switch(m_mode) {
   case mode_md5:
     {
       qDebug() << "Checksum of online database:" << m_webdata << endl;
       if(m_webdata.isEmpty()) {
-        printText(tr("Can not connect to Bones Webservice, please try again later.") + NL);
-        m_mode = mode_none;
+        text = tr("Can not connect to Bones Webservice, please try again later.") + NL;
+        QMessageBox::critical(this,"",text);
+        qApp->quit();
         return;
       }
       if(m_webdata == m_md5) {
-        printText(tr("You already have the newest WoodScan database.") + NL);
-        m_mode = mode_none;
+        text = tr("You already have the newest WoodScan database.") + NL;
+        QMessageBox::information(this,"",text);
+        qApp->quit();
         return;
       }
 
       m_md5 = m_webdata;
-      printText(tr("There is a newer WoodScan database. Starting download...") + NL);
 
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
       m_filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
       m_checkProgress->start();
-      printText(NL);
+      m_progress->setValue(0);
     }
     break;
   case mode_db:
@@ -274,8 +337,8 @@ void MainWidget::downloadFinished(Download *dl)
       conversionProgress = QString(m_webdata).toInt();
       if(conversionProgress != 100) {
         if(conversionProgress > 0) {
-          m_ui->textEdit->clear();
-          printText(tr("Generating database file: %1 %").arg(QString(m_webdata)) + NL);
+          m_progress->setLabelText(tr("Generating database file..."));
+          m_progress->setValue(QString(m_webdata).toInt());
         }
 
         m_checkProgress->start();
@@ -284,16 +347,21 @@ void MainWidget::downloadFinished(Download *dl)
       m_mode = mode_none;
       QFile file(dl->filename());
       if(!file.rename(m_destinationPath + "/" + DATAFILE)) {
-        m_ui->textEdit->clear();
-        printText(tr("Rename failed (%1 %2)!").arg(file.errorString()).arg(file.error()) + NL);
+        text = tr("Rename failed (%1 %2)!").arg(file.errorString()).arg(file.error()) + NL;
+        QMessageBox::critical(this,"",text);
+        qApp->quit();
+        return;
       } else {
-        m_ui->textEdit->clear();
-        printText(tr("Download finished, good bye.") + NL);
-
         QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
         md5file.setValue("Serial",m_serial);
         md5file.setValue("MD5", m_md5);
         md5file.sync();
+
+        text = tr("Download finished, good bye.") + NL;
+        text += "(" + m_destinationPath + "/" + DATAFILE + ")";
+        QMessageBox::information(this,"",text);
+        qApp->quit();
+        return;
       }
     }
     break;
@@ -305,20 +373,22 @@ void MainWidget::downloadFinished(Download *dl)
 void MainWidget::downloadFailed(Download *dl)
 {
   qDebug() << "Error:" << dl->error();
-  m_ui->textEdit->clear();
-  printText(tr("Download error!") + NL);
-  printText(tr("Please check if you are eligible to download a new database for your Milestone.") + NL);
-  printText(tr("Additionally please make sure the destination directory is not write protected and has enough free space.") + NL);
-  printText(tr("Please restart this application to try again.") + NL);
+  QString text;
+
+  text = tr("Download error!") + NL;
+  text += tr("Please check if you are eligible to download a new database for your Milestone.") + NL;
+  text += tr("Additionally please make sure the destination directory is not write protected and has enough free space.") + NL;
+  text += tr("Please restart this application to try again.") + NL;
+  critical(text, dl);
+  return;
 }
 
 void MainWidget::nextStep()
 {
   switch(m_mode) {
   case mode_md5:
-    // Download MD5 file and check if we already know this file
+    // Download MD5 file and check if we already know this file    
     m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
-    m_ui->textEdit->clear();
     break;
   default:
       ;

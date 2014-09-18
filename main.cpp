@@ -19,18 +19,23 @@
 
 #include <QTranslator>
 
-#include "application.h"
+#include <QApplication.h>
 #include "mainwidget.h"
 
 int main(int argc, char *argv[])
 {
-  Application a(argc, argv);
+  QApplication a(argc, argv);
 
   QTranslator translator;
   translator.load(a.applicationName() + "_" + QLocale::system().name(), a.applicationDirPath());
   a.installTranslator(&translator);
 
+  QTranslator translator2;
+  translator2.load("qtbase_de", a.applicationDirPath());
+  a.installTranslator(&translator2);
+
   MainWidget wid;
+  wid.setWindowState(Qt::WindowMinimized);
   wid.show();
   return a.exec();
 }
