@@ -29,7 +29,7 @@
 #include <QTimer>
 #include <QAuthenticator>
 
-#define RETRYCNT 10
+#define RETRYCNT 50
 
 DownloadManager::DownloadManager(QObject *parent)
   : QObject(parent)

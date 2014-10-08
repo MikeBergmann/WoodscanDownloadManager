@@ -58,6 +58,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_trayIcon(0)
 , m_trayIconMenu(0)
 , m_quitAction(0)
+, m_retry(3)
 {
   m_ui->setupUi(this);
 
@@ -65,9 +66,6 @@ MainWidget::MainWidget(QWidget *parent)
   m_urlParameter = "?serial=%1&rType=%2";
 
   m_manager = new DownloadManager(this);
-  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
-  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
-  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
 
   m_checkProgress = new QTimer(this);
   m_checkProgress->setInterval(5000);
@@ -100,7 +98,7 @@ void MainWidget::createActions()
   connect(m_quitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
 }
 
-void MainWidget::critical(QString &text, Download *dl)
+void MainWidget::stop(Download *dl)
 {
   disconnect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
   disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
@@ -109,6 +107,29 @@ void MainWidget::critical(QString &text, Download *dl)
   if(dl) {
     dl->stop();
   }
+}
+
+Download* MainWidget::start(QUrl url, QByteArray *destination)
+{
+  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+
+  return m_manager->download(url, destination);
+}
+
+Download* MainWidget::start(QUrl url, QString &destination)
+{
+  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+
+  return m_manager->download(url, destination);
+}
+
+void MainWidget::critical(QString &text, Download *dl)
+{
+  stop(dl);
   QMessageBox::critical(this,"",text);
   qApp->quit();
 }
@@ -189,15 +210,11 @@ void MainWidget::checkMilestone()
     box.button(QMessageBox::No)->setText(tr("Let the tool decide"));
     box.setIcon(QMessageBox::Question);
     box.setModal(true);
+    box.setDefaultButton(QMessageBox::No);
 
     box.exec();
     button = box.clickedButton() == box.button(QMessageBox::Yes) ? QMessageBox::Yes : QMessageBox::No;
 
-/*
-    button = QMessageBox::question(this, tr("No existing database found"),
-                                   tr("No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you."),
-                                   QMessageBox::Yes|QMessageBox::No, QMessageBox::No);
-*/
     if(button == QMessageBox::Yes) {
       QString path = QFileDialog::getExistingDirectory(this, tr("Please select destination directory"), m_destinationPath);
       if(!m_destinationPath.isEmpty()) {
@@ -246,7 +263,7 @@ void MainWidget::checkMilestone()
 void MainWidget::checkProgress()
 {
   m_webdata.clear();
-  m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
+  start(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
 }
 
 void MainWidget::debugText(QString text)
@@ -323,7 +340,7 @@ void MainWidget::downloadFinished(Download *dl)
 
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
-      m_filedl = m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
+      m_filedl = start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
       m_checkProgress->start();
       m_progress->setValue(0);
     }
@@ -352,6 +369,7 @@ void MainWidget::downloadFinished(Download *dl)
         qApp->quit();
         return;
       } else {
+        m_progress->setValue(m_progress->maximum());
         QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
         md5file.setValue("Serial",m_serial);
         md5file.setValue("MD5", m_md5);
@@ -373,6 +391,16 @@ void MainWidget::downloadFinished(Download *dl)
 void MainWidget::downloadFailed(Download *dl)
 {
   qDebug() << "Error:" << dl->error();
+
+  // Sometimes the file is not closed fast enough on the server after creation, simply retry...
+  if(m_mode == mode_db && dl->error() == QNetworkReply::InternalServerError && m_retry > 0) {
+    stop(dl);
+    m_retry--;
+    m_filedl = start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
+    m_checkProgress->start();
+    m_progress->setValue(0);
+  }
+
   QString text;
 
   text = tr("Download error!") + NL;
@@ -388,7 +416,7 @@ void MainWidget::nextStep()
   switch(m_mode) {
   case mode_md5:
     // Download MD5 file and check if we already know this file    
-    m_manager->download(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
+    start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
     break;
   default:
       ;

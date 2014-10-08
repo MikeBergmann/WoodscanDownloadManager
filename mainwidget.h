@@ -75,10 +75,14 @@ private:
   QSystemTrayIcon *m_trayIcon;
   QMenu *m_trayIconMenu;
   QAction *m_quitAction;
+  int m_retry;
 
   void createTrayIcon();
   void createActions();
 
+  Download* start(QUrl url, QByteArray *destination);
+  Download* start(QUrl url, QString &destination);
+  void stop(Download *dl);
   void critical(QString &text, Download *dl);
 };
 

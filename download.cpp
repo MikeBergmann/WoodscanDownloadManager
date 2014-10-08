@@ -56,12 +56,10 @@ Download::Download(QUrl &url, QDataStream *stream, QObject *parent)
   m_downloadSize = 0;
   m_pausedSize = 0;
 
+  // Timeout timer
   m_timer = new QTimer(this);
   m_timer->setInterval(15000);
   m_timer->setSingleShot(true);
-
-  // Timeout timer
-  connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
 }
 
 Download::Download(QUrl &url, const QString &destinationPath, QObject *parent)
@@ -85,7 +83,7 @@ Download::~Download()
 
 void Download::stop()
 {
-  m_timer->stop();
+  timerStop();
 
   if(m_reply) {
     m_reply->abort();
@@ -211,11 +209,13 @@ void Download::relocate()
 
 void Download::timerStart()
 {
+  connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
   m_timer->start();
 }
 
 void Download::timerStop()
 {
+  disconnect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
   m_timer->stop();
 }
 
@@ -229,7 +229,17 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *perc
   // Do not stream to QDataStream because the stream makes some sort of
   // data encoding, use writeRawData instead.
   if(m_stream->writeRawData(replyData.data(),replyData.size()) < replyData.size()) {
+    if(m_file) {
+      qDebug() << "File size:" << m_file->size() << endl;
+      qDebug() << "File error:" << m_file->error() << m_file->errorString() << endl;
+    }
     return false;
+  }
+
+  // Make sure we have no problems because of caching.
+  if(m_file) {
+    m_stream->device()->close();
+    m_stream->device()->open(QIODevice::Append);
   }
 
   m_error = m_reply->error();
