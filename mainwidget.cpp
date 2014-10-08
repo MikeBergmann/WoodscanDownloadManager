@@ -346,6 +346,13 @@ void MainWidget::downloadFinished(Download *dl)
     }
     break;
   case mode_db:
+
+    if(m_progress->wasCanceled()) {
+      stop(dl);
+      qApp->quit();
+      return;
+    }
+
     if(dl != m_filedl) {
       if(conversionProgress < QString(m_webdata).toInt()) {
         m_filedl->timerStart(); // We got a progress of database generation, so restart timer.
