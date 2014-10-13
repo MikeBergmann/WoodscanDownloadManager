@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
   a.installTranslator(&translator);
 
   QTranslator translator2;
-  translator2.load("qtbase_de", a.applicationDirPath());
+  translator2.load("qtbase_" + QLocale::system().name(), a.applicationDirPath());
   a.installTranslator(&translator2);
 
   MainWidget wid;

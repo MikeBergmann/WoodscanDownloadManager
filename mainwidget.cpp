@@ -87,6 +87,8 @@ MainWidget::MainWidget(QWidget *parent)
   m_trayIcon->setIcon(QIcon(":/Bones/WoodscanDM.ico"));
   m_trayIcon->show();
 
+  m_ui->label_2->setText(QString("WoodscanDM Version 1.0 (") + __DATE__ + " " + __TIME__ +")");
+
   setVisible(false);
 
   emit start();
@@ -173,7 +175,8 @@ void MainWidget::checkMilestone()
   }
 
   if(m_serial.isEmpty()) {
-    text += tr("No Milestone serial number. Aborting.") + NL;
+    text = tr("No Milestone serial number. Aborting.") + NL;
+    critical(text, 0);
     return;
   }
 
