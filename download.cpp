@@ -83,7 +83,7 @@ Download::~Download()
 
 void Download::stop()
 {
-  timerStop();
+  timeoutTimerStop();
 
   if(m_reply) {
     m_reply->abort();
@@ -96,7 +96,6 @@ void Download::stop()
   }
 
   m_pausedSize = m_downloadSize;
-  m_downloadSize = 0;
 }
 
 void Download::fillRequestHeader()
@@ -126,7 +125,7 @@ void Download::parseHeader()
     qDebug() << "Accept-Ranges = " << acceptRanges << m_hostSupportsRanges;
   }
 
-  m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toInt();
+  m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
 
   QString disposition;
   if(m_reply->hasRawHeader("Content-Disposition")) {
@@ -207,13 +206,13 @@ void Download::relocate()
  m_request->setUrl(url);
 }
 
-void Download::timerStart()
+void Download::timeoutTimerStart()
 {
   connect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
   m_timer->start();
 }
 
-void Download::timerStop()
+void Download::timeoutTimerStop()
 {
   disconnect(m_timer, SIGNAL(timeout()), this, SLOT(timeout()));
   m_timer->stop();
@@ -223,6 +222,10 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *perc
 {
   m_downloadSize = m_pausedSize + bytesReceived;
   qDebug() << QTime::currentTime() << "Download Progress: Received=" << m_downloadSize << ": Total=" << m_pausedSize + bytesTotal;
+
+  if(!m_reply) {
+    return false;
+  }
 
   QByteArray replyData = m_reply->readAll();
 
@@ -239,7 +242,10 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *perc
   // Make sure we have no problems because of caching.
   if(m_file) {
     m_stream->device()->close();
-    m_stream->device()->open(QIODevice::Append);
+    if(!m_stream->device()->open(QIODevice::Append)) {
+      qDebug() << "Can not reopen file:" << m_file->error() << m_file->errorString() << endl;
+      return false;
+    }
   }
 
   m_error = m_reply->error();
@@ -284,9 +290,14 @@ QString Download::filename()
   return m_fileName;
 }
 
-int Download::filesize()
+qint64 Download::filesize()
 {
   return m_totalSize;
+}
+
+qint64 Download::cursize()
+{
+  return m_downloadSize;
 }
 
 void Download::timeout()

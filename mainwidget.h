@@ -50,6 +50,7 @@ private slots:
 
   void checkMilestone(void);
   void checkProgress(void);
+  void checkCanceled(void);
 
 private:
 
@@ -70,6 +71,7 @@ private:
   QByteArray m_md5;
   QByteArray m_webdata;
   QTimer *m_checkProgress;
+  QTimer *m_checkCanceled;
   Download *m_filedl;
   QProgressDialog *m_progress;
   QSystemTrayIcon *m_trayIcon;
@@ -83,7 +85,8 @@ private:
   Download* start(QUrl url, QByteArray *destination);
   Download* start(QUrl url, QString &destination);
   void stop(Download *dl);
-  void critical(QString &text, Download *dl);
+  void stopAll(void);
+  void critical(QString &text);
 };
 
 #endif // MAINWIDGET_H_

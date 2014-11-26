@@ -43,7 +43,8 @@ signals:
 public slots:
   Download* download(QUrl url, const QString &destinationPath);
   Download* download(QUrl url, QByteArray *destination);
-  void pause(Download *dl);
+  void stop(Download *dl);
+  void stopAll(void);
   void resume(Download *dl);
 
 private slots:
@@ -57,6 +58,7 @@ private slots:
 private:
   QNetworkAccessManager *m_manager;
   QHash<QNetworkReply*, Download*> m_downloads;
+  int m_notfincnt;
 
   void doDownload(Download *dl);
   void downloadRequest(Download *dl);

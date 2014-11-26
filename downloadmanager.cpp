@@ -30,11 +30,13 @@
 #include <QAuthenticator>
 
 #define RETRYCNT 50
+#define NOTFINCNT 10
 
 DownloadManager::DownloadManager(QObject *parent)
   : QObject(parent)
   , m_manager(0)
   , m_downloads()
+  , m_notfincnt(0)
 {
   m_manager = new QNetworkAccessManager(this);
   connect(m_manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)), this, SLOT(authenticationRequired(QNetworkReply*,QAuthenticator*)));
@@ -66,7 +68,7 @@ void DownloadManager::downloadRequest(Download *dl)
   m_downloads.insert(dl->m_reply,dl);
 
   // Start timeout
-  dl->timerStart();
+  dl->timeoutTimerStart();
 }
 
 void DownloadManager::cleanupDownload(Download *dl)
@@ -75,12 +77,10 @@ void DownloadManager::cleanupDownload(Download *dl)
     disconnect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
     disconnect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
     disconnect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
-    if(dl->m_reply->isRunning()) {
-      dl->m_reply->abort();
-    }
+
     m_downloads.remove(dl->m_reply);
-    dl->m_reply->deleteLater();
-    dl->m_reply = 0;
+    dynamic_cast<DownloadBase*>(dl)->stop();
+
   } else {
     QList<QNetworkReply*> managed = m_downloads.keys(dl);
     if(managed.count()) {
@@ -103,9 +103,18 @@ Download* DownloadManager::download(QUrl url, QByteArray *destination)
   return dl;
 }
 
-void DownloadManager::pause(Download *dl)
+void DownloadManager::stop(Download *dl)
 {
-  dl->stop();
+  cleanupDownload(dl);
+}
+
+void DownloadManager::stopAll(void)
+{
+  QHashIterator<QNetworkReply*, Download*> i(m_downloads);
+  while (i.hasNext()) {
+    i.next();
+    cleanupDownload(i.value());
+  }
 }
 
 void DownloadManager::resume(Download *dl)
@@ -116,7 +125,7 @@ void DownloadManager::resume(Download *dl)
 void DownloadManager::doDownload(Download *dl)
 {
   // Download file
-  dl->fillRequestHeader();
+  dynamic_cast<DownloadBase*>(dl)->fillRequestHeader();
 
   // Cleanup old existion download (if there is one)
   cleanupDownload(dl);
@@ -129,87 +138,106 @@ void DownloadManager::doDownload(Download *dl)
   connect(dl->m_reply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(gotError(QNetworkReply::NetworkError)));
 
   // Start timeout
-  dl->timerStart();
+  dl->timeoutTimerStart();
 }
 
 void DownloadManager::gotHeader(void)
 {
   Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
+  if(dl) {
+    dl->timeoutTimerStop();
 
-  dl->timerStop();
+    QList<QByteArray> rawHeaderList = dl->m_reply->rawHeaderList();
+    foreach(QByteArray header, rawHeaderList) {
+      QString headerLine = QString(header) + ": " + dl->m_reply->rawHeader(header);
+      emit printText(headerLine);
+    }
 
-  QList<QByteArray> rawHeaderList = dl->m_reply->rawHeaderList();
-  foreach(QByteArray header, rawHeaderList) {
-    QString headerLine = QString(header) + ": " + dl->m_reply->rawHeader(header);
-    emit printText(headerLine);
-  }
+    dynamic_cast<DownloadBase*>(dl)->parseHeader();
+    if(dl->error()) {
+      if(dl->error() == QNetworkReply::ProtocolInvalidOperationError) {
+        emit failed(dl) ;
+        return;
+      }
+      qDebug() << dl->error() << endl;
+    }
 
-  dl->parseHeader();
-  if(dl->error()) {
-    if(dl->error() == QNetworkReply::ProtocolInvalidOperationError) {
-      emit failed(dl) ;
+    if(dynamic_cast<DownloadBase*>(dl)->checkRelocation()) {
+      dynamic_cast<DownloadBase*>(dl)->relocate();
+      cleanupDownload(dl);
+      downloadRequest(dl);
       return;
     }
-    qDebug() << dl->error() << endl;
-  }
 
-  if(dl->checkRelocation()) {
-    dl->relocate();
-    cleanupDownload(dl);
-    downloadRequest(dl);
-    return;
+    dynamic_cast<DownloadBase*>(dl)->openFile();
+    doDownload(dl);
   }
-
-  dl->openFile();
-  doDownload(dl);
 }
 
 void DownloadManager::finished(void)
 {
   Download *dl = m_downloads.value(dynamic_cast<QNetworkReply*>(QObject::sender()));
+  if(dl) {
+    dl->timeoutTimerStop();
+    dynamic_cast<DownloadBase*>(dl)->processFinished();
 
-  dl->timerStop();
-  dl->processFinished();
+    cleanupDownload(dl);
 
-  cleanupDownload(dl);
-
-  if(dl->error() == QNetworkReply::RemoteHostClosedError) {
-    if(dl->errorCnt() < RETRYCNT) {
+    if(dl->error() == QNetworkReply::RemoteHostClosedError) {
       qDebug() << dl->error() << endl;
-      pause(dl);
-      doDownload(dl);
+      if(dl->errorCnt() < RETRYCNT) {
+        stop(dl);
+        doDownload(dl);
+        return;
+      }
+    }
+
+    if(dl->cursize() < dl->filesize()) {
+      qDebug() << "size error" << dl->cursize() << "of" << dl->filesize() << endl;
+      if(m_notfincnt < NOTFINCNT) {
+        m_notfincnt++;
+        stop(dl);
+        doDownload(dl);
+        return;
+      } else {
+        qDebug() <<  "Failed, retries:" << m_notfincnt << endl;
+        emit failed(dl);
+        return;
+      }
+    }
+
+    if(dl->error()) {
+      dynamic_cast<DownloadBase*>(dl)->closeFile();
+      qDebug() <<  "Failed, retries:" << dl->errorCnt() << endl;
+      emit failed(dl);
       return;
     }
-  }
 
-  if(dl->error()) {
-    dl->closeFile();
-    qDebug() <<  "Failed, retries:" << dl->errorCnt() << endl;
-    emit failed(dl);
-    return;
+    dynamic_cast<DownloadBase*>(dl)->closeFile();
+    qDebug() <<  "Completed, retries:" << dl->errorCnt() << endl;
+    emit complete(dl);
   }
-
-  dl->closeFile();
-  qDebug() <<  "Completed, retries:" << dl->errorCnt() << endl;
-  emit complete(dl);
 }
 
 void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
 {
   QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());
   Download *dl = m_downloads.value(reply);
+  if(dl) {
+    dl->timeoutTimerStop();
+    int percentage;
 
-  dl->timerStop();
-  int percentage;
+    if(!dynamic_cast<DownloadBase*>(dl)->processDownload(bytesReceived, bytesTotal, &percentage)) {
+      if(dl->m_reply) {
+        dl->m_reply->abort();
+      }
+      return;
+    }
 
-  if(!dl->processDownload(bytesReceived, bytesTotal, &percentage)) {
-    dl->m_reply->abort();
-    return;
+    emit downloadProgress(dl, percentage);
+
+    dl->timeoutTimerStart();
   }
-
-  emit downloadProgress(dl, percentage);
-
-  dl->timerStart();
 }
 
 void DownloadManager::gotError(QNetworkReply::NetworkError errorcode)
@@ -227,7 +255,7 @@ void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenti
 }
 
 void DownloadManager::timeout(QNetworkReply* reply)
-{  
+{
   qDebug() << __FUNCTION__ << reply->url();
   reply->abort();
   reply->deleteLater();

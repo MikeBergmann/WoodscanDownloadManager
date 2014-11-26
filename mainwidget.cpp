@@ -53,6 +53,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_md5()
 , m_webdata()
 , m_checkProgress(0)
+, m_checkCanceled(0)
 , m_filedl(0)
 , m_progress(0)
 , m_trayIcon(0)
@@ -71,11 +72,16 @@ MainWidget::MainWidget(QWidget *parent)
   m_checkProgress->setInterval(5000);
   m_checkProgress->setSingleShot(true);
 
+  m_checkCanceled = new QTimer(this);
+  m_checkCanceled->setInterval(500);
+  m_checkCanceled->setSingleShot(true);
+
   // Timeout timer
   connect(m_checkProgress, SIGNAL(timeout()), this, SLOT(checkProgress()));
+  connect(m_checkCanceled, SIGNAL(timeout()), this, SLOT(checkCanceled()));
 
   // QueuedConnection because we want to finish constructor before calling the slot.
-  connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);  
+  connect(this, SIGNAL(start()), this, SLOT(checkMilestone()), Qt::QueuedConnection);
 
   m_progress = new QProgressDialog(tr("Download..."),tr("Cancel"),0,100,this);
   m_progress->setWindowModality(Qt::WindowModal);
@@ -87,7 +93,7 @@ MainWidget::MainWidget(QWidget *parent)
   m_trayIcon->setIcon(QIcon(":/Bones/WoodscanDM.ico"));
   m_trayIcon->show();
 
-  m_ui->label_2->setText(QString("WoodscanDM Version 1.0 (") + __DATE__ + " " + __TIME__ +")");
+  m_ui->label_2->setText(QString("WoodscanDM Version 1.1 (") + __DATE__ + " " + __TIME__ +")");
 
   setVisible(false);
 
@@ -106,9 +112,16 @@ void MainWidget::stop(Download *dl)
   disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
   disconnect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
 
-  if(dl) {
-    dl->stop();
-  }
+  m_manager->stop(dl);
+}
+
+void MainWidget::stopAll(void)
+{
+  disconnect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+  disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+  disconnect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+
+  m_manager->stopAll();
 }
 
 Download* MainWidget::start(QUrl url, QByteArray *destination)
@@ -129,9 +142,9 @@ Download* MainWidget::start(QUrl url, QString &destination)
   return m_manager->download(url, destination);
 }
 
-void MainWidget::critical(QString &text, Download *dl)
+void MainWidget::critical(QString &text)
 {
-  stop(dl);
+  stopAll();
   QMessageBox::critical(this,"",text);
   qApp->quit();
 }
@@ -176,7 +189,7 @@ void MainWidget::checkMilestone()
 
   if(m_serial.isEmpty()) {
     text = tr("No Milestone serial number. Aborting.") + NL;
-    critical(text, 0);
+    critical(text);
     return;
   }
 
@@ -229,7 +242,7 @@ void MainWidget::checkMilestone()
     if(!dir.exists()) {
       if(!dir.mkpath(m_destinationPath)) {
         text += tr("No destination directory. Aborting.");
-        critical(text, 0);
+        critical(text);
         return;
       }
     }
@@ -269,6 +282,26 @@ void MainWidget::checkProgress()
   start(m_url+m_urlParameter.arg(m_serial).arg(3), &m_webdata);
 }
 
+void MainWidget::checkCanceled()
+{
+  if(m_progress && m_progress->wasCanceled()) {
+    QString text = tr("Do you really want to cancel the download?");
+    QMessageBox::StandardButton ret = QMessageBox::question(this,"",text);
+    if(ret == QMessageBox::Yes) {
+      stopAll();
+      qApp->quit();
+      return;
+    } else {
+      QProgressDialog *old = m_progress;
+      m_progress = new QProgressDialog(old->labelText(),tr("Cancel"),0,100,this);
+      m_progress->setWindowModality(Qt::WindowModal);
+      m_progress->setMinimumDuration(0);
+      delete old;
+    }
+  }
+  m_checkCanceled->start();
+}
+
 void MainWidget::debugText(QString text)
 {
   qDebug() << text;
@@ -288,7 +321,7 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
           if(dl->filesize() > info.size()) {
             if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
               text = tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL;
-              critical(text, dl);
+              critical(text);
               return;
             }
           }
@@ -298,20 +331,17 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
         if(dl->filesize()) {
           if(availableDiskSpace(m_destinationPath) < dl->filesize()) {
             text = tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL;
-            critical(text, dl);
+            critical(text);
             return;
           }
         }
       }
     }
 
-    if(percentage >= 0 && percentage < 100) {      
-      m_progress->setLabelText(tr("Download..."));
-      m_progress->setValue(percentage);
-      if(m_progress->wasCanceled()) {
-        m_manager->pause(dl);
-        qApp->quit();
-        return;
+    if(percentage >= 0 && percentage < 100) {
+      if(m_progress && !m_progress->wasCanceled()) {
+        m_progress->setLabelText(tr("Download..."));
+        m_progress->setValue(percentage);
       }
     }
   }
@@ -346,28 +376,24 @@ void MainWidget::downloadFinished(Download *dl)
       m_filedl = start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
       m_checkProgress->start();
       m_progress->setValue(0);
+      m_checkCanceled->start();
     }
     break;
   case mode_db:
 
-    if(m_progress->wasCanceled()) {
-      stop(dl);
-      qApp->quit();
-      return;
-    }
-
     if(dl != m_filedl) {
       if(conversionProgress < QString(m_webdata).toInt()) {
-        m_filedl->timerStart(); // We got a progress of database generation, so restart timer.
+        m_filedl->timeoutTimerStart(); // We got a progress of database generation, so restart timer.
       }
 
       conversionProgress = QString(m_webdata).toInt();
       if(conversionProgress != 100) {
-        if(conversionProgress > 0) {
-          m_progress->setLabelText(tr("Generating database file..."));
-          m_progress->setValue(QString(m_webdata).toInt());
+        if(m_progress && !m_progress->wasCanceled()) {
+          if(conversionProgress > 0) {
+            m_progress->setLabelText(tr("Generating database file..."));
+            m_progress->setValue(QString(m_webdata).toInt());
+          }
         }
-
         m_checkProgress->start();
       }
     } else {
@@ -417,7 +443,7 @@ void MainWidget::downloadFailed(Download *dl)
   text += tr("Please check if you are eligible to download a new database for your Milestone.") + NL;
   text += tr("Additionally please make sure the destination directory is not write protected and has enough free space.") + NL;
   text += tr("Please restart this application to try again.") + NL;
-  critical(text, dl);
+  critical(text);
   return;
 }
 
@@ -425,7 +451,7 @@ void MainWidget::nextStep()
 {
   switch(m_mode) {
   case mode_md5:
-    // Download MD5 file and check if we already know this file    
+    // Download MD5 file and check if we already know this file
     start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), &m_webdata);
     break;
   default:

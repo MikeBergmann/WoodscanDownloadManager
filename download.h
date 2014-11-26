@@ -28,6 +28,10 @@ class QNetworkAccessManager;
 class QNetworkRequest;
 class QTimer;
 
+/**
+ * Download interface class to allow DownloadManager access to
+ * protected members.
+ */
 class DownloadBase : public QObject {
   Q_OBJECT
 
@@ -40,8 +44,22 @@ public:
 protected:
   QNetworkRequest *m_request;
   QNetworkReply *m_reply;
+
+  virtual void stop(void) = 0;
+  virtual void fillRequestHeader(void) = 0;
+  virtual void parseHeader(void) = 0;
+  virtual void openFile(void) = 0;
+  virtual QString closeFile(void) = 0;
+  virtual bool checkRelocation(void) = 0;
+  virtual void relocate(void) = 0;
+  virtual int processDownload(qint64 bytesReceived, qint64 bytesTotal, int *percentage) = 0;
+  virtual void processFinished(void) = 0;
+  virtual void setError(QNetworkReply::NetworkError error) = 0;
 };
 
+/**
+ * Download class used as handle for DownloadManager
+ */
 class Download : public DownloadBase {
   Q_OBJECT
 
@@ -50,6 +68,19 @@ public:
   explicit Download(QUrl &url,const QString &destinationPath, QObject *parent = 0);
   virtual ~Download(void);
 
+  void timeoutTimerStart(void);
+  void timeoutTimerStop(void);
+
+  QNetworkReply::NetworkError error(void);
+  int errorCnt(void);
+  QString filename(void);
+  qint64 filesize(void);
+  qint64 cursize(void);
+
+signals:
+  void timeout(QNetworkReply *reply);
+
+protected:
   void stop(void);
   void fillRequestHeader(void);
   void parseHeader(void);
@@ -57,18 +88,9 @@ public:
   QString closeFile(void);
   bool checkRelocation(void);
   void relocate(void);
-  void timerStart(void);
-  void timerStop(void);
   int processDownload(qint64 bytesReceived, qint64 bytesTotal, int *percentage);
   void processFinished(void);
-  QNetworkReply::NetworkError error(void);
   void setError(QNetworkReply::NetworkError error);
-  int errorCnt(void);
-  QString filename(void);
-  int filesize(void);
-
-signals:
-  void timeout(QNetworkReply *reply);
 
 private slots:
   void timeout(void);
@@ -80,9 +102,9 @@ private:
   QDataStream *m_stream;
 
   bool m_hostSupportsRanges;
-  int m_totalSize;
-  int m_downloadSize;
-  int m_pausedSize;
+  qint64 m_totalSize;
+  qint64 m_downloadSize;
+  qint64 m_pausedSize;
   QNetworkReply::NetworkError m_error;
   int m_errorCnt;
 
