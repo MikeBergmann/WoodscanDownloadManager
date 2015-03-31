@@ -24,8 +24,6 @@
 #include <QNetworkReply>
 
 class QFile;
-class QNetworkAccessManager;
-class QNetworkRequest;
 class QTimer;
 
 /**
@@ -33,7 +31,6 @@ class QTimer;
  * protected members.
  */
 class DownloadBase : public QObject {
-  Q_OBJECT
 
   friend class DownloadManager;
 

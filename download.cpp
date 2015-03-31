@@ -125,7 +125,9 @@ void Download::parseHeader()
     qDebug() << "Accept-Ranges = " << acceptRanges << m_hostSupportsRanges;
   }
 
-  m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
+  if(m_reply->header(QNetworkRequest::ContentLengthHeader).toLongLong() > 0) {
+    m_totalSize = m_reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
+  }
 
   QString disposition;
   if(m_reply->hasRawHeader("Content-Disposition")) {
@@ -254,6 +256,10 @@ int Download::processDownload(qint64 bytesReceived, qint64 bytesTotal, int *perc
   }
 
   *percentage = static_cast<int>((static_cast<float>(m_pausedSize + bytesReceived) * 100.0) / static_cast<float>(m_pausedSize + bytesTotal));
+
+  if(m_totalSize == 0 && bytesTotal > 0) {
+    m_totalSize = m_pausedSize + bytesTotal;
+  }
 
   return true;
 }
