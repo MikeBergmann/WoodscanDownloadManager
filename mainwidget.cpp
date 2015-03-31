@@ -60,6 +60,7 @@ MainWidget::MainWidget(QWidget *parent)
 , m_trayIconMenu(0)
 , m_quitAction(0)
 , m_retry(3)
+, m_managerConnected(false)
 {
   m_ui->setupUi(this);
 
@@ -111,6 +112,9 @@ void MainWidget::stop(Download *dl)
   disconnect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
   disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
   disconnect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+  disconnect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
+
+  m_managerConnected = false;
 
   m_manager->stop(dl);
 }
@@ -120,24 +124,35 @@ void MainWidget::stopAll(void)
   disconnect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
   disconnect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
   disconnect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+  disconnect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
+
+  m_managerConnected = false;
 
   m_manager->stopAll();
 }
 
 Download* MainWidget::start(QUrl url, QByteArray *destination)
 {
-  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
-  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
-  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+  if(!m_managerConnected) {
+    connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+    connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+    connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+    connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
+    m_managerConnected = true;
+  }
 
   return m_manager->download(url, destination);
 }
 
 Download* MainWidget::start(QUrl url, QString &destination)
 {
-  connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
-  connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
-  connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+  if(!m_managerConnected) {
+    connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
+    connect(m_manager, SIGNAL(failed(Download*)), this, SLOT(downloadFailed(Download*)));
+    connect(m_manager, SIGNAL(downloadProgress(Download*, int)), this, SLOT(downloadProgress(Download*, int)));
+    connect(m_manager, SIGNAL(printText(QString)), this, SLOT(debugText(QString)));
+    m_managerConnected = true;
+  }
 
   return m_manager->download(url, destination);
 }
@@ -314,7 +329,10 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
 
   if(dl == m_filedl) {
     if(firstrun) {
+      qDebug() << "Going to download" << dl->filesize() << endl;
+
       firstrun = false;
+
       if(QFile::exists(m_destinationPath + "/" + DATAFILE)) {
         QFileInfo info(m_destinationPath + "/" + DATAFILE);
         if(dl->filesize()) {

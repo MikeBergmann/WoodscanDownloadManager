@@ -78,7 +78,7 @@ private:
   QMenu *m_trayIconMenu;
   QAction *m_quitAction;
   int m_retry;
-
+  bool m_managerConnected;
   void createTrayIcon();
   void createActions();
 
