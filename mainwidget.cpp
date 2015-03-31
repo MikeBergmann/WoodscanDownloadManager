@@ -94,7 +94,7 @@ MainWidget::MainWidget(QWidget *parent)
   m_trayIcon->setIcon(QIcon(":/Bones/WoodscanDM.ico"));
   m_trayIcon->show();
 
-  m_ui->label_2->setText(QString("WoodscanDM Version 1.1 (") + __DATE__ + " " + __TIME__ +")");
+  m_ui->label_2->setText(QString("WoodscanDM Version 1.2 Beta 1 (") + __DATE__ + " " + __TIME__ +")");
 
   setVisible(false);
 
