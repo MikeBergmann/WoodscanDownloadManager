@@ -226,11 +226,11 @@ void MainWidget::checkMilestone()
   if(m_destinationPath.isEmpty()) {
 
     if(m_drives.length() > 1 && availableDiskSpace(QString(m_drives.at(0)) + ":/") < availableDiskSpace(QString(m_drives.at(1)) + ":/")) {
-      m_destinationPath =QString( m_drives.at(1)) + ":/" + PATH;
+      m_destinationPath = QString( m_drives.at(1)) + ":/" + PATH;
     } else if(!m_drives.isEmpty()) {
       m_destinationPath = QString(m_drives.at(0)) + ":/" + PATH;
     } else {
-      m_destinationPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+      m_destinationPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + PATH;
     }
 
     QMessageBox::StandardButton button;
@@ -251,6 +251,15 @@ void MainWidget::checkMilestone()
       if(!m_destinationPath.isEmpty()) {
         m_destinationPath = path;
       }
+    }
+
+    if(m_destinationPath.endsWith("/")) {
+      m_destinationPath.remove(m_destinationPath.length()-1,1);
+    }
+
+    if(!m_destinationPath.endsWith(PATH,Qt::CaseInsensitive)) {
+      m_destinationPath += "/";
+      m_destinationPath += PATH;
     }
 
     QDir dir(m_destinationPath);
