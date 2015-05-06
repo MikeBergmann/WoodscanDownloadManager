@@ -52,7 +52,7 @@ private slots:
   void checkMilestone(void);
   void checkProgress(void);
   void checkCanceled(void);
-  void quit(void);
+  void quit(bool ok, QString error);
 
 private:
 

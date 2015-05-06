@@ -18,24 +18,24 @@
 <context>
     <name>MainWidget</name>
     <message>
-        <location filename="mainwidget.cpp" line="+86"/>
-        <location line="+257"/>
+        <location filename="mainwidget.cpp" line="+101"/>
+        <location line="+317"/>
         <source>Download...</source>
         <translation>Download...</translation>
     </message>
     <message>
-        <location line="-257"/>
-        <location line="+210"/>
+        <location line="-317"/>
+        <location line="+236"/>
         <source>Cancel</source>
         <translation>Abbruch</translation>
     </message>
     <message>
-        <location line="-191"/>
+        <location line="-217"/>
         <source>&amp;Quit</source>
         <translation>&amp;Beenden</translation>
     </message>
     <message>
-        <location line="+60"/>
+        <location line="+74"/>
         <source>Welcome to the Bones Woodscan Download Manager!</source>
         <translation>Willkommen beim Bones Woodscan Download Manager!</translation>
     </message>
@@ -80,27 +80,27 @@
         <translation>Keine Milestone Seriennummer. Abbruch.</translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+87"/>
         <source>I&apos;m now going online to check if a new WoodScan database is available. Please confirm to continue.</source>
         <translation>Es wird nun geprüft ob eine neuere Woodscan Datenbank verfügbar ist. Bitte betätigen Sie mit OK um fortzufahren.</translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+22"/>
         <source>Do you really want to cancel the download?</source>
         <translation>Wollen Sie den Download wirklich abbrechen?</translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+106"/>
         <source>Can not connect to Bones Webservice, please try again later.</source>
         <translation>Keine Verbindung zum Bones Update Server möglich. Bitte versuchen Sie es später nochmal.</translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+34"/>
         <source>Generating database file...</source>
         <translation>Datenbank wird generiert...</translation>
     </message>
     <message>
-        <location line="-170"/>
+        <location line="-217"/>
         <source>No existing Woodscan database found, do you want to select the directory manually? If not I will choose a proper one for you.</source>
         <translation>Es wurde keine existierende Woodscan Datenbank auf Ihrem Gerät gefunden, wollen Sie den Pfad manuell angeben? Wenn Sie das nicht wollen, wird automatisch ein geeigneter Pfad auf Ihrem Gerät gewählt.</translation>
     </message>
@@ -120,12 +120,12 @@
         <translation>Bitte Zielverzeichnis wählen</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+18"/>
         <source>No destination directory. Aborting.</source>
         <translation>Kein Zielverzeichnis. Abbruch.</translation>
     </message>
     <message>
-        <location line="+79"/>
+        <location line="+116"/>
         <location line="+10"/>
         <source>Not enough free disk space in %1. Aborting.</source>
         <translation>In dem Zielpfad %1 steht nicht genügend Speicherplatz zur Verfügung. Abbruch.</translation>
@@ -136,17 +136,21 @@
         <translation>Sie haben bereits die neueste Woodscan Datenbank.</translation>
     </message>
     <message>
-        <location line="+37"/>
         <source>Rename failed (%1 %2)!</source>
-        <translation>Umbenennen fehlgeschlagen (%1 %2)!</translation>
+        <translation type="vanished">Umbenennen fehlgeschlagen (%1 %2)!</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="-84"/>
         <source>Download finished, good bye.</source>
         <translation>Download beendet. Wir wünschen Ihnen einen schönen Tag.</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+130"/>
+        <source>Copy database file to destination...</source>
+        <translation>Kopiere die Datenbank ins Zielverzeichnis...</translation>
+    </message>
+    <message>
+        <location line="+32"/>
         <source>Download error!</source>
         <translation>Fehler beim Download!</translation>
     </message>

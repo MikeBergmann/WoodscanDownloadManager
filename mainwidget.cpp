@@ -74,14 +74,12 @@ MainWidget::MainWidget(QWidget *parent)
 , m_quitAction(0)
 , m_retry(3)
 , m_managerConnected(false)
-, m_logfile(qApp->applicationDirPath()+"/log.txt")
+, m_logfile()
 {
   m_ui->setupUi(this);
 
   m_url = "http://woodscan.bones.ch/updater.php";
   m_urlParameter = "?serial=%1&rType=%2";
-
-  m_logfile.remove();
 
   m_manager = new DownloadManager(this);
 
@@ -310,6 +308,9 @@ void MainWidget::checkMilestone()
 
   QMessageBox::StandardButton ret = QMessageBox::information(this,"",text,QMessageBox::Ok, QMessageBox::Cancel);
   if(ret == QMessageBox::Ok) {
+    // Filecopy test
+    //m_mode = mode_db;
+    //downloadFinished(m_filedl);
     nextStep();
   } else {
     qApp->quit();
@@ -342,8 +343,17 @@ void MainWidget::checkCanceled()
   m_checkCanceled->start();
 }
 
-void MainWidget::quit()
+void MainWidget::quit(bool ok, QString error)
 {
+  if(!ok)
+    debugText(error);
+
+  m_progress->setValue(m_progress->maximum());
+  QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
+  md5file.setValue("Serial",m_serial);
+  md5file.setValue("MD5", m_md5);
+  md5file.sync();
+
   QString text = tr("Download finished, good bye.") + NL;
   text += "(" + m_destinationPath + "/" + DATAFILE + ")";
   QMessageBox::information(this,"",text);
@@ -352,6 +362,14 @@ void MainWidget::quit()
 
 void MainWidget::debugText(QString text)
 {
+  static bool firstcall = true;
+
+  if(firstcall) {
+    m_logfile.setFileName(qApp->applicationDirPath()+"/log.txt");
+    m_logfile.remove();
+    firstcall = false;
+  }
+
   qDebug() << text;
   m_logfile.open(QIODevice::Append);
   m_logfile.write(text.toLocal8Bit());
@@ -366,7 +384,7 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
 
   if(dl == m_filedl) {
     if(firstrun) {
-      FileGroup group(m_destinationPath, QRegularExpression("\\A[0-9][0-9]?_germany.ebx\\Z"));
+      FileGroup group(m_destinationPath, QRegularExpression("\\A([0-9][0-9]?_)?germany.ebx\\Z"));
       qDebug() << "Going to download" << dl->filesize() << endl;
 
       firstrun = false;
@@ -459,6 +477,7 @@ void MainWidget::downloadFinished(Download *dl)
       m_mode = mode_none;
 
       QString src = dl->filename();
+//      src = "C:/Users/Mike/AppData/Local/Temp/623075.enc";
       QString dst = m_destinationPath + "/" + DATAFILE;
 
       Thread *thread = new Thread();
@@ -470,8 +489,8 @@ void MainWidget::downloadFinished(Download *dl)
       m_progress->connect(copier, SIGNAL(hasProgressMaximum(int)), SLOT(setMaximum(int)));
       m_progress->connect(copier, SIGNAL(hasProgressValue(int)), SLOT(setValue(int)));
       m_progress->connect(m_progress, SIGNAL(canceled()), SLOT(cancel()));
-      connect(copier, SIGNAL(finished(bool, QString)), SLOT(quit()));
-      copier->copy(src, dst, 2133958656/2);
+      connect(copier, SIGNAL(finished(bool, QString)), SLOT(quit(bool, QString)));
+      copier->copy(src, dst, 2133958656);
     }
     break;
   default:
