@@ -33,13 +33,26 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QApplication>
+#include <QThread>
+#include <QNetworkReply>
 
 #include "download.h"
+#include "FileSplitter.h"
+#include "FileGroup.h"
 
 #define NL QString("\n")
 #define PATH QString("Barcode")
 #define MD5FILE QString("germany.md5")
 #define DATAFILE QString("germany.ebx")
+
+/**
+ * A thread that is always destructible: if quits the event loop and waits
+ * for it to finish.
+ */
+class Thread : public QThread {
+public:
+  ~Thread(void) { quit(); wait(); }
+};
 
 MainWidget::MainWidget(QWidget *parent)
 : QWidget(parent)
@@ -61,11 +74,14 @@ MainWidget::MainWidget(QWidget *parent)
 , m_quitAction(0)
 , m_retry(3)
 , m_managerConnected(false)
+, m_logfile(qApp->applicationDirPath()+"/log.txt")
 {
   m_ui->setupUi(this);
 
   m_url = "http://woodscan.bones.ch/updater.php";
   m_urlParameter = "?serial=%1&rType=%2";
+
+  m_logfile.remove();
 
   m_manager = new DownloadManager(this);
 
@@ -94,7 +110,7 @@ MainWidget::MainWidget(QWidget *parent)
   m_trayIcon->setIcon(QIcon(":/Bones/WoodscanDM.ico"));
   m_trayIcon->show();
 
-  m_ui->label_2->setText(QString("WoodscanDM Version 1.2 Beta 1 (") + __DATE__ + " " + __TIME__ +")");
+  m_ui->label_2->setText(QString("WoodscanDM Version 1.3 Beta 1 (") + __DATE__ + " " + __TIME__ +")");
 
   setVisible(false);
 
@@ -144,7 +160,7 @@ Download* MainWidget::start(QUrl url, QByteArray *destination)
   return m_manager->download(url, destination);
 }
 
-Download* MainWidget::start(QUrl url, QString &destination)
+Download* MainWidget::start(QUrl url, const QString &destination)
 {
   if(!m_managerConnected) {
     connect(m_manager, SIGNAL(complete(Download*)), this, SLOT(downloadFinished(Download*)));
@@ -230,7 +246,7 @@ void MainWidget::checkMilestone()
     } else if(!m_drives.isEmpty()) {
       m_destinationPath = QString(m_drives.at(0)) + ":/" + PATH;
     } else {
-      m_destinationPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + PATH;
+      m_destinationPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + PATH;
     }
 
     QMessageBox::StandardButton button;
@@ -326,9 +342,21 @@ void MainWidget::checkCanceled()
   m_checkCanceled->start();
 }
 
+void MainWidget::quit()
+{
+  QString text = tr("Download finished, good bye.") + NL;
+  text += "(" + m_destinationPath + "/" + DATAFILE + ")";
+  QMessageBox::information(this,"",text);
+  qApp->quit();
+}
+
 void MainWidget::debugText(QString text)
 {
   qDebug() << text;
+  m_logfile.open(QIODevice::Append);
+  m_logfile.write(text.toLocal8Bit());
+  m_logfile.write("\n");
+  m_logfile.close();
 }
 
 void MainWidget::downloadProgress(Download *dl, int percentage)
@@ -338,22 +366,24 @@ void MainWidget::downloadProgress(Download *dl, int percentage)
 
   if(dl == m_filedl) {
     if(firstrun) {
+      FileGroup group(m_destinationPath, QRegularExpression("\\A[0-9][0-9]?_germany.ebx\\Z"));
       qDebug() << "Going to download" << dl->filesize() << endl;
 
       firstrun = false;
 
-      if(QFile::exists(m_destinationPath + "/" + DATAFILE)) {
-        QFileInfo info(m_destinationPath + "/" + DATAFILE);
+      qint64 groupsize = group.size();
+
+      if(groupsize > 0) {
         if(dl->filesize()) {
-          if(dl->filesize() > info.size()) {
-            if(availableDiskSpace(m_destinationPath) < (dl->filesize() - info.size())) {
+          if(dl->filesize() > groupsize) {
+            if(availableDiskSpace(m_destinationPath) < (dl->filesize() - groupsize)) {
               text = tr("Not enough free disk space in %1. Aborting.").arg(m_destinationPath) + NL;
               critical(text);
               return;
             }
           }
         }
-        QFile::remove(m_destinationPath + "/" + DATAFILE);
+        group.remove();
       } else {
         if(dl->filesize()) {
           if(availableDiskSpace(m_destinationPath) < dl->filesize()) {
@@ -400,15 +430,16 @@ void MainWidget::downloadFinished(Download *dl)
 
       m_mode = mode_db;
       qDebug() << "Start:" << QTime::currentTime() << endl;
-      m_filedl = start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), m_destinationPath);
+      m_filedl = start(m_url+m_urlParameter.arg(m_serial).arg(m_mode), QDir::tempPath()+"/");
       m_checkProgress->start();
       m_progress->setValue(0);
       m_checkCanceled->start();
     }
     break;
   case mode_db:
-
+    // Check if we are in 'download' or in 'database generation' mode
     if(dl != m_filedl) {
+      // Database Generation Mode
       if(conversionProgress < QString(m_webdata).toInt()) {
         m_filedl->timeoutTimerStart(); // We got a progress of database generation, so restart timer.
       }
@@ -424,26 +455,23 @@ void MainWidget::downloadFinished(Download *dl)
         m_checkProgress->start();
       }
     } else {
+      // Download Mode
       m_mode = mode_none;
-      QFile file(dl->filename());
-      if(!file.rename(m_destinationPath + "/" + DATAFILE)) {
-        text = tr("Rename failed (%1 %2)!").arg(file.errorString()).arg(file.error()) + NL;
-        QMessageBox::critical(this,"",text);
-        qApp->quit();
-        return;
-      } else {
-        m_progress->setValue(m_progress->maximum());
-        QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
-        md5file.setValue("Serial",m_serial);
-        md5file.setValue("MD5", m_md5);
-        md5file.sync();
 
-        text = tr("Download finished, good bye.") + NL;
-        text += "(" + m_destinationPath + "/" + DATAFILE + ")";
-        QMessageBox::information(this,"",text);
-        qApp->quit();
-        return;
-      }
+      QString src = dl->filename();
+      QString dst = m_destinationPath + "/" + DATAFILE;
+
+      Thread *thread = new Thread();
+      FileSplitter *copier = new FileSplitter(); // No parent because of moveToThread
+      copier->moveToThread(thread);
+      thread->start();
+      m_progress->setLabelText(tr("Copy database file to destination..."));
+      m_progress->setValue(0);
+      m_progress->connect(copier, SIGNAL(hasProgressMaximum(int)), SLOT(setMaximum(int)));
+      m_progress->connect(copier, SIGNAL(hasProgressValue(int)), SLOT(setValue(int)));
+      m_progress->connect(m_progress, SIGNAL(canceled()), SLOT(cancel()));
+      connect(copier, SIGNAL(finished(bool, QString)), SLOT(quit()));
+      copier->copy(src, dst, 2133958656/2);
     }
     break;
   default:
@@ -453,7 +481,10 @@ void MainWidget::downloadFinished(Download *dl)
 
 void MainWidget::downloadFailed(Download *dl)
 {
-  qDebug() << "Error:" << dl->error();
+  qDebug() << "Error:" << (dl ? QString::number(dl->error()) : "No DL object!");
+
+  if(!dl)
+    return;
 
   // Sometimes the file is not closed fast enough on the server after creation, simply retry...
   if(m_mode == mode_db && dl->error() == QNetworkReply::InternalServerError && m_retry > 0) {

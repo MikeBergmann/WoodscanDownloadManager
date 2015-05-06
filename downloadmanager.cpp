@@ -156,10 +156,12 @@ void DownloadManager::gotHeader(void)
     dynamic_cast<DownloadBase*>(dl)->parseHeader();
     if(dl->error()) {
       if(dl->error() == QNetworkReply::ProtocolInvalidOperationError) {
+        emit printText(QString("gotHeader ProtocolInvalidOperationError %1").arg(dl->error()));
         emit failed(dl) ;
         return;
       }
-      qDebug() << dl->error() << endl;
+
+      emit printText(QString("gotHeader Error %1").arg(dl->error()));
     }
 
     if(dynamic_cast<DownloadBase*>(dl)->checkRelocation()) {
@@ -184,8 +186,9 @@ void DownloadManager::finished(void)
     cleanupDownload(dl);
 
     if(dl->error() == QNetworkReply::RemoteHostClosedError) {
-      qDebug() << dl->error() << endl;
+      emit printText(QString("RemoteHostClosedError %1").arg(dl->error()));
       if(dl->errorCnt() < RETRYCNT) {
+        emit printText("Retrying...");
         stop(dl);
         doDownload(dl);
         return;
@@ -193,14 +196,15 @@ void DownloadManager::finished(void)
     }
 
     if(dl->cursize() < dl->filesize()) {
-      qDebug() << "size error" << dl->cursize() << "of" << dl->filesize() << endl;
+      emit printText(QString("Size error %1 of %2").arg(dl->cursize()).arg(dl->filesize()));
       if(m_notfincnt < NOTFINCNT) {
         m_notfincnt++;
+        emit printText("Retrying...");
         stop(dl);
         doDownload(dl);
         return;
       } else {
-        qDebug() <<  "Failed, retries:" << m_notfincnt << endl;
+        emit printText(QString("Failed, retries: %1").arg(m_notfincnt));
         emit failed(dl);
         return;
       }
@@ -208,13 +212,13 @@ void DownloadManager::finished(void)
 
     if(dl->error()) {
       dynamic_cast<DownloadBase*>(dl)->closeFile();
-      qDebug() <<  "Failed, retries:" << dl->errorCnt() << endl;
+      emit printText(QString("Failed, retries: %1").arg(dl->errorCnt()));
       emit failed(dl);
       return;
     }
 
     dynamic_cast<DownloadBase*>(dl)->closeFile();
-    qDebug() <<  "Completed, retries:" << dl->errorCnt() << endl;
+    emit printText(QString("Completed, retries: %1").arg(dl->errorCnt()));
     emit complete(dl);
   }
 }
@@ -243,7 +247,7 @@ void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
 void DownloadManager::gotError(QNetworkReply::NetworkError errorcode)
 {
   QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());
-  qDebug() << __FUNCTION__ << "(" << errorcode << ")";
+  emit printText(QString("gotError %1").arg(errorcode));
   reply->deleteLater();
 }
 
@@ -256,8 +260,7 @@ void DownloadManager::authenticationRequired(QNetworkReply */*reply*/, QAuthenti
 
 void DownloadManager::timeout(QNetworkReply* reply)
 {
-  qDebug() << __FUNCTION__ << reply->url();
+  emit printText(QString("timeout %1").arg(reply->url().url()));
   reply->abort();
   reply->deleteLater();
 }
-

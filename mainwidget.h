@@ -21,6 +21,7 @@
 #define MAINWIDGET_H_
 
 #include <QWidget>
+#include <QFile>
 
 #include "downloadmanager.h"
 
@@ -51,6 +52,7 @@ private slots:
   void checkMilestone(void);
   void checkProgress(void);
   void checkCanceled(void);
+  void quit(void);
 
 private:
 
@@ -79,11 +81,13 @@ private:
   QAction *m_quitAction;
   int m_retry;
   bool m_managerConnected;
+  QFile m_logfile;
+
   void createTrayIcon();
   void createActions();
 
   Download* start(QUrl url, QByteArray *destination);
-  Download* start(QUrl url, QString &destination);
+  Download* start(QUrl url, const QString &destination);
   void stop(Download *dl);
   void stopAll(void);
   void critical(QString &text);
