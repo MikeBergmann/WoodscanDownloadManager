@@ -30,20 +30,21 @@
 
 #include "FileSplitter.h"
 
-FileSplitter::FileSplitter(QObject *parent) :
-  QObject(parent),
-  m_mutex(),
-  m_fileBuffer(65536, Qt::Uninitialized), // Copy 64kbytes at a time
-  m_copyTimer(),
-  m_progressTimer(),
-  m_error(),
-  m_inFile(),
-  m_outFile(),
-  m_sizeTotal(0),
-  m_sizeDone(0),
-  m_maxFileSize(0),
-  m_fileNo(0),
-  m_shift(0)
+FileSplitter::FileSplitter(QObject *parent, bool keepFileClosed)
+  : QObject(parent)
+  , m_mutex()
+  , m_fileBuffer(65536, Qt::Uninitialized) // Copy 64kbytes at a time
+  , m_copyTimer()
+  , m_progressTimer()
+  , m_error()
+  , m_inFile()
+  , m_outFile()
+  , m_sizeTotal(0)
+  , m_sizeDone(0)
+  , m_maxFileSize(0)
+  , m_fileNo(0)
+  , m_shift(0)
+  , m_keepFileClosed(keepFileClosed)
 {
   m_inFile.setObjectName("source");
   m_outFile.setObjectName("destination");
@@ -119,10 +120,18 @@ void FileSplitter::timerEvent(QTimerEvent *event) {
       }
     }
 
+    if(m_keepFileClosed && !m_outFile.isOpen()) {
+      m_outFile.open(QIODevice::Append);
+    }
+
     qint64 writeSize = m_outFile.write(m_fileBuffer.constData(), readSize);
     if(writeSize == -1) {
       error(m_outFile);
       return;
+    }
+
+    if(m_keepFileClosed) {
+      m_outFile.close();
     }
 
     Q_ASSERT(writeSize == readSize);

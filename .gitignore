@@ -7,6 +7,7 @@
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+Debug
 
 # Mac
 .DS_Store
@@ -21,3 +22,4 @@ WoodscanDM.svg
 WoodscanDM.png
 *.autosave
 *.bones
+

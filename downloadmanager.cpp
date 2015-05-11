@@ -29,6 +29,7 @@
 #include <QTimer>
 #include <QAuthenticator>
 
+#define HEADRETRYCNT 5
 #define RETRYCNT 50
 #define NOTFINCNT 10
 
@@ -73,6 +74,8 @@ void DownloadManager::downloadRequest(Download *dl)
 
 void DownloadManager::cleanupDownload(Download *dl)
 {
+  disconnect(dl, SIGNAL(timeout(QNetworkReply*)), this, SLOT(timeout(QNetworkReply*)));
+
   if(dl->m_reply) {
     disconnect(dl->m_reply, SIGNAL(finished()), this, SLOT(finished()));
     disconnect(dl->m_reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
@@ -155,13 +158,22 @@ void DownloadManager::gotHeader(void)
 
     dynamic_cast<DownloadBase*>(dl)->parseHeader();
     if(dl->error()) {
-      if(dl->error() == QNetworkReply::ProtocolInvalidOperationError) {
+      switch(dl->error()) {
+      case QNetworkReply::ProtocolInvalidOperationError:
         emit printText(QString("gotHeader ProtocolInvalidOperationError %1").arg(dl->error()));
         emit failed(dl) ;
-        return;
+        break;
+      default:
+        emit printText(QString("gotHeader Error %1").arg(dl->error()));
+        if(dl->errorCnt() < HEADRETRYCNT) {
+          emit printText("Retrying...");
+          stop(dl);
+          downloadRequest(dl);
+        } else {
+          emit failed(dl) ;
+        }
       }
-
-      emit printText(QString("gotHeader Error %1").arg(dl->error()));
+      return;
     }
 
     if(dynamic_cast<DownloadBase*>(dl)->checkRelocation()) {
@@ -225,7 +237,13 @@ void DownloadManager::finished(void)
 
 void DownloadManager::downloadProgress(qint64 bytesReceived, qint64 bytesTotal)
 {
-  QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());
+  QNetworkReply* reply = dynamic_cast<QNetworkReply*>(QObject::sender());  
+
+  if(reply->error()) {
+    qDebug() << "downloadProgress error:" << reply->error();
+    return;
+  }
+
   Download *dl = m_downloads.value(reply);
   if(dl) {
     dl->timeoutTimerStop();

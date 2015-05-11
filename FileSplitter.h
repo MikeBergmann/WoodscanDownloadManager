@@ -31,7 +31,7 @@ class FileSplitter : public QObject {
   Q_OBJECT
 
 public:
-  explicit FileSplitter(QObject *parent = 0);
+  explicit FileSplitter(QObject *parent = 0, bool keepFileClosed = false);
   ~FileSplitter();
 
 protected:
@@ -43,6 +43,7 @@ protected:
   qint64 m_sizeTotal, m_sizeDone, m_maxFileSize;
   int m_fileNo;
   int m_shift;
+  bool m_keepFileClosed;
 
   void close(void);
   void error(QFile& f);

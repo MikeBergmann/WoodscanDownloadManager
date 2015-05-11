@@ -22,9 +22,9 @@
 #include <QDir>
 #include <QDebug>
 
-FileGroup::FileGroup(const QString path, QRegularExpression matcher) :
-  m_path(path),
-  m_matcher(matcher)
+FileGroup::FileGroup(const QString path, QRegularExpression matcher)
+  : m_path(path)
+  , m_matcher(matcher)
 {
 }
 

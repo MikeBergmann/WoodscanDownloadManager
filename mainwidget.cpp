@@ -55,26 +55,26 @@ public:
 };
 
 MainWidget::MainWidget(QWidget *parent)
-: QWidget(parent)
-, m_ui(new Ui::Form)
-, m_url()
-, m_urlParameter()
-, m_serial()
-, m_drives()
-, m_destinationPath()
-, m_manager(0)
-, m_md5()
-, m_webdata()
-, m_checkProgress(0)
-, m_checkCanceled(0)
-, m_filedl(0)
-, m_progress(0)
-, m_trayIcon(0)
-, m_trayIconMenu(0)
-, m_quitAction(0)
-, m_retry(3)
-, m_managerConnected(false)
-, m_logfile()
+  : QWidget(parent)
+  , m_ui(new Ui::Form)
+  , m_url()
+  , m_urlParameter()
+  , m_serial()
+  , m_drives()
+  , m_destinationPath()
+  , m_manager(0)
+  , m_md5()
+  , m_webdata()
+  , m_checkProgress(0)
+  , m_checkCanceled(0)
+  , m_filedl(0)
+  , m_progress(0)
+  , m_trayIcon(0)
+  , m_trayIconMenu(0)
+  , m_quitAction(0)
+  , m_retry(3)
+  , m_managerConnected(false)
+  , m_logfile()
 {
   m_ui->setupUi(this);
 
@@ -348,6 +348,8 @@ void MainWidget::quit(bool ok, QString error)
   if(!ok)
     debugText(error);
 
+  qDebug() << QTime::currentTime() << endl;
+
   m_progress->setValue(m_progress->maximum());
   QSettings md5file(m_destinationPath + "/" + MD5FILE, QSettings::IniFormat);
   md5file.setValue("Serial",m_serial);
@@ -481,7 +483,7 @@ void MainWidget::downloadFinished(Download *dl)
       QString dst = m_destinationPath + "/" + DATAFILE;
 
       Thread *thread = new Thread();
-      FileSplitter *copier = new FileSplitter(); // No parent because of moveToThread
+      FileSplitter *copier = new FileSplitter(0, true); // No parent because of moveToThread
       copier->moveToThread(thread);
       thread->start();
       m_progress->setLabelText(tr("Copy database file to destination..."));
@@ -491,6 +493,7 @@ void MainWidget::downloadFinished(Download *dl)
       m_progress->connect(m_progress, SIGNAL(canceled()), SLOT(cancel()));
       connect(copier, SIGNAL(finished(bool, QString)), SLOT(quit(bool, QString)));
       copier->copy(src, dst, 2133958656);
+      qDebug() << QTime::currentTime() << endl;
     }
     break;
   default:
