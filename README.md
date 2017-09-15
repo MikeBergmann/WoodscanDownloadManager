@@ -10,6 +10,10 @@ The main purpose I made the tool open source is to illustrate how to download a 
 Product link:
   http://www.bones.ch/woodscan312.php?Language=English
 
+** Remark **
+
+WoodscanDownloadManager is currently only working on Windows because of platform specific code to identify the player on the USB.
+
 **License:**
 
 WoodscanDownloadManager is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version.
