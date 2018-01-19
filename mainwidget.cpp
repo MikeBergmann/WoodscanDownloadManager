@@ -35,8 +35,9 @@
 #include <QApplication>
 #include <QThread>
 #include <QNetworkReply>
+#include <QDebug>
 
-#include "download.h"
+#include "DownloadManager/download.h"
 #include "FileSplitter.h"
 #include "FileGroup.h"
 

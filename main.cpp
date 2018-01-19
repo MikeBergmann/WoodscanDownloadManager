@@ -18,8 +18,7 @@
 */
 
 #include <QTranslator>
-
-#include <QApplication.h>
+#include <QApplication>
 #include "mainwidget.h"
 
 int main(int argc, char *argv[])

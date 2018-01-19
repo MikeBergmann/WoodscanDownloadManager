@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with WoodscanDownloadManager.  If not, see <http://www.gnu.org/licenses/>.
 
-QT       += network widgets
+QT       += gui network widgets
 TARGET = WoodscanDM
 # CONFIG   += console
 
@@ -31,17 +31,17 @@ DEFINES += _UNICODE
 SOURCES += \
     main.cpp \
     mainwidget.cpp \
-    downloadmanager.cpp \
+    DownloadManager/downloadmanager.cpp \
+    DownloadManager/download.cpp \
     milestone.cpp \
-    download.cpp \
     FileSplitter.cpp \
     FileGroup.cpp
 
 HEADERS += \
     mainwidget.h \
-    downloadmanager.h \
+    DownloadManager/downloadmanager.h \
+    DownloadManager/download.h \
     milestone.h \
-    download.h \
     FileSplitter.h \
     FileGroup.h
 

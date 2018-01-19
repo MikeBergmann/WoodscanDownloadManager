@@ -23,7 +23,7 @@
 #include <QWidget>
 #include <QFile>
 
-#include "downloadmanager.h"
+#include "DownloadManager/downloadmanager.h"
 
 class QProgressDialog;
 class QSystemTrayIcon;
