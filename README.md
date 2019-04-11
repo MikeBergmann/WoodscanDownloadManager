@@ -5,12 +5,13 @@ Woodscan is a combination of a USB Barcode Reader and a screen-less, TTS capable
 
 WoodscanDownloadManager is a Qt based companion tool for the Woodscan bar-code reader to update the bar-code database delivered with the reader.
 
-The main purpose I made the tool open source is to illustrate how to download a file including pause and resume.
+**Bones decided to change the download mechanism, so most likely this tool is not working any more or getting old data.
+The main purpose I made the tool open source is to illustrate how to download a file including pause and resume.**
 
 Product link:
   http://www.bones.ch/woodscan312.php?Language=English
 
-** Remark **
+**Remark:**
 
 WoodscanDownloadManager is currently only working on Windows because of platform specific code to identify the player on the USB.
 
